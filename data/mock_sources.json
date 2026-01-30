@@ -1,0 +1,143 @@
+[
+  {
+    "topic": "EU AI Act",
+    "geography": "EU",
+    "date": "2024-03-13",
+    "statement": "The EU AI Act was formally adopted on March 13, 2024, establishing comprehensive regulations for artificial intelligence systems.",
+    "url_placeholder": "https://eur-lex.europa.eu/ai-act"
+  },
+  {
+    "topic": "GDPR enforcement",
+    "geography": "EU",
+    "date": "2023-12-15",
+    "statement": "GDPR fines reached €1.6 billion in 2023, with major violations in data processing and consent management.",
+    "url_placeholder": "https://gdpr.eu/fines-2023"
+  },
+  {
+    "topic": "US interest rates",
+    "geography": "US",
+    "date": "2024-01-31",
+    "statement": "Federal Reserve maintained interest rates at 5.25-5.50% in January 2024, signaling potential cuts later in the year.",
+    "url_placeholder": "https://federalreserve.gov/rates-2024"
+  },
+  {
+    "topic": "China tariffs",
+    "geography": "US",
+    "date": "2023-11-20",
+    "statement": "US-China trade tariffs remain at 25% on $250B of goods as of November 2023, with ongoing negotiations.",
+    "url_placeholder": "https://ustr.gov/china-tariffs"
+  },
+  {
+    "topic": "UK labor law",
+    "geography": "UK",
+    "date": "2024-02-01",
+    "statement": "UK updated employment regulations in February 2024, affecting flexible working rights and redundancy procedures.",
+    "url_placeholder": "https://gov.uk/employment-law-2024"
+  },
+  {
+    "topic": "India data protection",
+    "geography": "India",
+    "date": "2023-08-11",
+    "statement": "India's Digital Personal Data Protection Act was passed in August 2023, with implementation expected in 2024.",
+    "url_placeholder": "https://meity.gov.in/dpdp-act"
+  },
+  {
+    "topic": "SEC disclosure rules",
+    "geography": "US",
+    "date": "2024-01-10",
+    "statement": "SEC enhanced disclosure requirements for climate-related risks in January 2024, affecting public companies.",
+    "url_placeholder": "https://sec.gov/climate-disclosure"
+  },
+  {
+    "topic": "FTC merger guidelines",
+    "geography": "US",
+    "date": "2023-12-18",
+    "statement": "FTC and DOJ updated merger guidelines in December 2023, increasing scrutiny on vertical and horizontal mergers.",
+    "url_placeholder": "https://ftc.gov/merger-guidelines-2023"
+  },
+  {
+    "topic": "HIPAA compliance",
+    "geography": "US",
+    "date": "2023-10-15",
+    "statement": "HIPAA enforcement actions increased 40% in 2023, focusing on healthcare data breaches and business associate agreements.",
+    "url_placeholder": "https://hhs.gov/hipaa-enforcement-2023"
+  },
+  {
+    "topic": "EU sanctions Russia",
+    "geography": "EU",
+    "date": "2024-02-23",
+    "statement": "EU expanded sanctions against Russia in February 2024, targeting additional sectors and individuals.",
+    "url_placeholder": "https://ec.europa.eu/sanctions-russia-2024"
+  },
+  {
+    "topic": "Global supply chain",
+    "geography": "Global",
+    "date": "2023-12-05",
+    "statement": "Global supply chain disruptions decreased in Q4 2023, with shipping costs returning to pre-pandemic levels.",
+    "url_placeholder": "https://worldbank.org/supply-chain-2023"
+  },
+  {
+    "topic": "Cybersecurity regulations",
+    "geography": "US",
+    "date": "2024-01-25",
+    "statement": "New federal cybersecurity requirements for critical infrastructure were announced in January 2024.",
+    "url_placeholder": "https://cisa.gov/cyber-regulations-2024"
+  },
+  {
+    "topic": "EU carbon pricing",
+    "geography": "EU",
+    "date": "2023-11-20",
+    "statement": "EU carbon prices reached €85 per ton in November 2023, driven by policy changes and market demand.",
+    "url_placeholder": "https://ec.europa.eu/carbon-pricing-2023"
+  },
+  {
+    "topic": "UK GDPR adequacy",
+    "geography": "UK",
+    "date": "2024-01-15",
+    "statement": "UK-EU data adequacy decision was extended in January 2024, ensuring continued data flows until 2025.",
+    "url_placeholder": "https://ico.org.uk/eu-adequacy-2024"
+  },
+  {
+    "topic": "India manufacturing",
+    "geography": "India",
+    "date": "2023-12-10",
+    "statement": "India's manufacturing PMI reached 56.4 in December 2023, indicating strong growth in the sector.",
+    "url_placeholder": "https://indianmanufacturing.org/pmi-2023"
+  },
+  {
+    "topic": "US antitrust tech",
+    "geography": "US",
+    "date": "2024-02-14",
+    "statement": "DOJ and FTC increased enforcement actions against tech platforms in early 2024, focusing on competition.",
+    "url_placeholder": "https://justice.gov/antitrust-tech-2024"
+  },
+  {
+    "topic": "EU digital markets",
+    "geography": "EU",
+    "date": "2024-03-07",
+    "statement": "EU Digital Markets Act came into full effect in March 2024, requiring gatekeeper platforms to comply with new rules.",
+    "url_placeholder": "https://ec.europa.eu/dma-2024"
+  },
+  {
+    "topic": "Global inflation",
+    "geography": "Global",
+    "date": "2024-01-20",
+    "statement": "Global inflation rates moderated to 3.2% in January 2024, down from peak levels in 2022-2023.",
+    "url_placeholder": "https://imf.org/inflation-2024"
+  },
+  {
+    "topic": "US labor market",
+    "geography": "US",
+    "date": "2024-02-02",
+    "statement": "US unemployment rate remained at 3.7% in February 2024, with strong job growth in services sectors.",
+    "url_placeholder": "https://bls.gov/unemployment-2024"
+  },
+  {
+    "topic": "China data localization",
+    "geography": "China",
+    "date": "2023-09-01",
+    "statement": "China's data localization requirements were strengthened in September 2023, affecting foreign companies operating in China.",
+    "url_placeholder": "https://cac.gov.cn/data-localization-2023"
+  }
+]
+
