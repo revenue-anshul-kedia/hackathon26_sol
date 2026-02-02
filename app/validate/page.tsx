@@ -412,6 +412,61 @@ export default function ValidatePage() {
                 </div>
               </div>
             </div>
+
+            {/* Sources Section */}
+            {result.sources && result.sources.length > 0 && (
+              <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">Sources & References</h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  {result.sources.length} source(s) identified in the draft
+                </p>
+                <div className="space-y-4">
+                  {result.sources.map((source) => (
+                    <div key={source.id} className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-mono text-xs text-gray-600">{source.id}</span>
+                            {source.type && (
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">
+                                {source.type}
+                              </span>
+                            )}
+                          </div>
+                          {source.title && (
+                            <h4 className="font-semibold text-gray-800 mb-1">{source.title}</h4>
+                          )}
+                          {source.url && (
+                            <a
+                              href={source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 text-sm break-all"
+                            >
+                              {source.url}
+                            </a>
+                          )}
+                          <div className="mt-2 text-sm text-gray-600 space-y-1">
+                            {source.author && <div><strong>Author:</strong> {source.author}</div>}
+                            {source.date && <div><strong>Date:</strong> {source.date}</div>}
+                            {source.excerpt && (
+                              <div className="mt-2 italic text-gray-700">
+                                "{source.excerpt}"
+                              </div>
+                            )}
+                            {source.claim_reference && (
+                              <div className="mt-2 text-xs text-gray-500">
+                                <strong>Referenced in:</strong> {source.claim_reference}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

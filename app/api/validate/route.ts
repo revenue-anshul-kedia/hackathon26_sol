@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
-import { ValidationResult, ValidationInput } from '@/lib/validation'
+import { ValidationResult, ValidationInput, SourceReference } from '@/lib/validation'
+import mockSources from '@/data/mock_sources.json'
+import { searchWeb, validateAndEnrichURL, generateSearchQueries } from '@/lib/web-search'
 
 // Build context-specific validation guidelines based on metadata
 function buildContextGuidelines(
@@ -166,6 +168,293 @@ function getStakesLevelRequirements(stakesLevel: string): string {
     'Board-level': 'Zero tolerance for high/medium findings, all claims must be sourced and dated'
   }
   return requirements[stakesLevel] || 'Standard validation applies'
+}
+
+// Extract sources and references from text
+function extractSources(
+  originalText: string,
+  rewrittenText: string,
+  caseType: string,
+  geography: string,
+  industry: string
+): SourceReference[] {
+  const sources: SourceReference[] = []
+  const sourceIdCounter = { count: 0 }
+  
+  // Pattern to match [SOURCE: ...] markers
+  const sourcePattern = /\[SOURCE:\s*([^\]]+)\]/gi
+  const urlPattern = /https?:\/\/[^\s\)]+/gi
+  const citationPattern = /\([A-Z][a-z]+\s+et\s+al\.?\s*,\s*\d{4}\)/gi
+  
+  // Extract from both original and rewritten text
+  const allText = `${originalText}\n${rewrittenText}`
+  
+  // Extract [SOURCE: ...] markers
+  let match
+  while ((match = sourcePattern.exec(allText)) !== null) {
+    const sourceText = match[1].trim()
+    sourceIdCounter.count++
+    
+    // Try to extract URL if present
+    const urlMatch = sourceText.match(urlPattern)
+    const url = urlMatch ? urlMatch[0] : undefined
+    
+    // Determine source type
+    let type: SourceReference['type'] = 'citation'
+    if (url) {
+      type = 'url'
+    } else if (sourceText.toLowerCase().includes('regulation') || sourceText.toLowerCase().includes('act') || sourceText.toLowerCase().includes('gdpr') || sourceText.toLowerCase().includes('sec')) {
+      type = 'regulation'
+    } else if (sourceText.toLowerCase().includes('study') || sourceText.toLowerCase().includes('research') || sourceText.toLowerCase().includes('analysis')) {
+      type = 'study'
+    }
+    
+    // Try to match with mock sources
+    const matchedMockSource = findMatchingMockSource(sourceText, geography, industry)
+    
+    sources.push({
+      id: `S-${String(sourceIdCounter.count).padStart(3, '0')}`,
+      url: url || matchedMockSource?.url_placeholder,
+      title: matchedMockSource?.statement || sourceText,
+      author: matchedMockSource ? undefined : extractAuthor(sourceText),
+      date: matchedMockSource?.date || extractDate(sourceText),
+      excerpt: matchedMockSource?.statement,
+      claim_reference: findClaimReference(match[0], originalText),
+      type,
+    })
+  }
+  
+  // Extract standalone URLs
+  const urlMatches = allText.match(urlPattern)
+  if (urlMatches) {
+    for (const url of urlMatches) {
+      // Skip if already captured in SOURCE marker
+      if (!sources.some(s => s.url === url)) {
+        sourceIdCounter.count++
+        sources.push({
+          id: `S-${String(sourceIdCounter.count).padStart(3, '0')}`,
+          url,
+          type: 'url',
+          claim_reference: findClaimReference(url, originalText),
+        })
+      }
+    }
+  }
+  
+  // Extract citations (Author, Year)
+  while ((match = citationPattern.exec(allText)) !== null) {
+    const citation = match[0]
+    sourceIdCounter.count++
+    
+    sources.push({
+      id: `S-${String(sourceIdCounter.count).padStart(3, '0')}`,
+      title: citation,
+      type: 'citation',
+      claim_reference: findClaimReference(citation, originalText),
+    })
+  }
+  
+  return sources
+}
+
+// Find matching mock source based on text content
+function findMatchingMockSource(sourceText: string, geography: string, industry: string): any {
+  const lowerText = sourceText.toLowerCase()
+  
+  // Check for geography match first
+  const geoMatches = mockSources.filter((s: any) => 
+    s.geography === geography && 
+    (lowerText.includes(s.topic.toLowerCase()) || lowerText.includes(s.geography.toLowerCase()))
+  )
+  
+  if (geoMatches.length > 0) {
+    return geoMatches[0]
+  }
+  
+  // Check for topic matches
+  const topicMatches = mockSources.filter((s: any) => 
+    lowerText.includes(s.topic.toLowerCase())
+  )
+  
+  return topicMatches[0] || null
+}
+
+// Extract author from source text
+function extractAuthor(text: string): string | undefined {
+  const patterns = [
+    /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/,
+    /by\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/i,
+    /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+et\s+al/i,
+  ]
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern)
+    if (match) {
+      return match[1]
+    }
+  }
+  
+  return undefined
+}
+
+// Extract date from source text
+function extractDate(text: string): string | undefined {
+  const patterns = [
+    /\b(20\d{2}-\d{2}-\d{2})\b/,
+    /\b(20\d{2}-\d{2})\b/,
+    /\b(20\d{2})\b/,
+    /(January|February|March|April|May|June|July|August|September|October|November|December)\s+(20\d{2})/i,
+  ]
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern)
+    if (match) {
+      return match[0]
+    }
+  }
+  
+  return undefined
+}
+
+// Find which claim a source supports
+function findClaimReference(sourceMarker: string, text: string): string | undefined {
+  const markerIndex = text.indexOf(sourceMarker)
+  if (markerIndex === -1) return undefined
+  
+  const start = Math.max(0, markerIndex - 50)
+  const end = Math.min(text.length, markerIndex + sourceMarker.length + 100)
+  const context = text.substring(start, end)
+  
+  const sentences = context.split(/[.!?]+/)
+  const relevantSentence = sentences.find(s => s.includes(sourceMarker)) || context.substring(0, 100)
+  
+  return relevantSentence.trim().substring(0, 150)
+}
+
+// Extract numeric claims from text for proactive source search
+function extractNumericClaims(text: string): string[] {
+  const claims: string[] = []
+  const sentences = text.split(/[.!?]+/)
+  
+  // Pattern for numeric claims (percentages, dollar amounts, statistics)
+  const numericPattern = /\b\d+[%€$£]?\s*(million|billion|trillion|thousand|percent|%|points?)\b/i
+  
+  for (const sentence of sentences) {
+    if (numericPattern.test(sentence) && !sentence.match(/\[SOURCE:/) && !sentence.match(/https?:\/\//)) {
+      claims.push(sentence.trim())
+    }
+  }
+  
+  return claims.slice(0, 5) // Limit to 5
+}
+
+// Extract regulatory claims from text for proactive source search
+function extractRegulatoryClaims(text: string, geography: string): string[] {
+  const claims: string[] = []
+  const sentences = text.split(/[.!?]+/)
+  
+  // Pattern for regulatory references
+  const regulatoryPattern = /\b(GDPR|HIPAA|SEC|FTC|regulation|act|compliance)\b/i
+  
+  for (const sentence of sentences) {
+    if (regulatoryPattern.test(sentence) && !sentence.match(/\[SOURCE:/) && !sentence.match(/https?:\/\//)) {
+      claims.push(sentence.trim())
+    }
+  }
+  
+  return claims.slice(0, 5) // Limit to 5
+}
+
+// Enrich sources with web search results for unsourced claims
+async function enrichSourcesWithWebSearch(
+  existingSources: SourceReference[],
+  unsourcedFindings: any[],
+  caseType: string,
+  geography: string,
+  industry: string
+): Promise<SourceReference[]> {
+  const enrichedSources = [...existingSources]
+  
+  // If no web search APIs configured, return existing sources
+  if (!process.env.SERP_API_KEY && 
+      !process.env.GOOGLE_SEARCH_API_KEY && 
+      !process.env.BING_SEARCH_API_KEY) {
+    console.log('No web search API configured. Skipping web search enrichment.')
+    return enrichedSources
+  }
+  
+  console.log(`[WEB SEARCH] Starting enrichment for ${unsourcedFindings.length} findings`)
+  
+  // For each unsourced finding, try to find relevant sources
+  for (const finding of unsourcedFindings.slice(0, 5)) { // Limit to 5 to avoid rate limits
+    try {
+      const claim = finding.claim_excerpt || finding.rationale || ''
+      if (!claim || claim.length < 20) {
+        console.log(`[WEB SEARCH] Skipping finding - claim too short: "${claim.substring(0, 50)}"`)
+        continue
+      }
+      
+      // Generate search query from claim
+      const searchQuery = `${claim.substring(0, 100)} ${industry} ${geography} 2024`
+      console.log(`[WEB SEARCH] Searching for: "${searchQuery}"`)
+      
+      // Search the web
+      const searchResults = await searchWeb({
+        query: searchQuery,
+        geography,
+        maxResults: 2, // Get top 2 results per claim
+      })
+      
+      console.log(`[WEB SEARCH] Found ${searchResults.length} results for query: "${searchQuery}"`)
+      
+      // Add search results as potential sources
+      for (const result of searchResults) {
+        // Check if URL already exists
+        if (!enrichedSources.some(s => s.url === result.url)) {
+          enrichedSources.push({
+            id: `S-${String(enrichedSources.length + 1).padStart(3, '0')}`,
+            url: result.url,
+            title: result.title,
+            excerpt: result.snippet,
+            claim_reference: claim.substring(0, 150),
+            type: 'url',
+            date: result.date,
+            source: result.source,
+          })
+          console.log(`[WEB SEARCH] Added source: ${result.url}`)
+        } else {
+          console.log(`[WEB SEARCH] Skipping duplicate URL: ${result.url}`)
+        }
+      }
+      
+      // Small delay to avoid rate limits
+      await new Promise(resolve => setTimeout(resolve, 500))
+    } catch (error) {
+      console.error(`[WEB SEARCH] Error searching for claim "${finding.claim_excerpt}":`, error)
+      if (error instanceof Error) {
+        console.error(`[WEB SEARCH] Error message: ${error.message}`)
+        console.error(`[WEB SEARCH] Error stack: ${error.stack}`)
+      }
+    }
+  }
+  
+  console.log(`[WEB SEARCH] Enrichment complete. Total sources: ${enrichedSources.length}`)
+  
+  // Validate and enrich existing URLs
+  for (const source of enrichedSources) {
+    if (source.url && !source.title) {
+      try {
+        const validation = await validateAndEnrichURL(source.url)
+        if (validation.valid && validation.title) {
+          source.title = validation.title
+        }
+      } catch (error) {
+        console.error(`Error validating URL ${source.url}:`, error)
+      }
+    }
+  }
+  
+  return enrichedSources
 }
 
 // Initialize Azure OpenAI client
@@ -560,7 +849,19 @@ Analyze the provided draft text and return a JSON object with the following stru
     }
   ],
   "rewritten_text": "client-safe version that addresses ALL findings and is contextually appropriate",
-  "summary_next_steps": ["bullet 1", "bullet 2", "bullet 3"]
+  "summary_next_steps": ["bullet 1", "bullet 2", "bullet 3"],
+  "sources": [
+    {
+      "id": "S-001",
+      "url": "https://example.com/source",
+      "title": "Source Title",
+      "author": "Author Name",
+      "date": "2024-01-01",
+      "excerpt": "Relevant excerpt from source",
+      "claim_reference": "Which claim this supports",
+      "type": "url" | "citation" | "internal" | "study" | "regulation"
+    }
+  ]
 }
 
 CRITICAL: The rewritten_text MUST:
@@ -568,16 +869,18 @@ CRITICAL: The rewritten_text MUST:
 2. Replace overconfident language ("will guarantee", "proves", "ensures") with advisory language ("may", "suggests", "indicates")
 3. Add specific dates to vague time references (e.g., "as of [DATE]" or "in [YEAR]")
 4. Add jurisdiction context to regulatory references (e.g., "${geography} GDPR" or "${geography} SEC regulations")
-5. Add [SOURCE NEEDED] markers or citations for unsourced numeric claims
-6. Add [ASSUMPTION] markers where assumptions are made
-7. Maintain the original meaning and structure while making it client-safe
-8. Use industry-appropriate terminology and case-type-specific language
-9. The rewritten text should ideally achieve "READY" status when re-validated
+5. Add [SOURCE: description or URL] markers for all claims that need sources
+6. Preserve existing [SOURCE: ...] markers from the original text
+7. Add [SOURCE NEEDED] markers or citations for unsourced numeric claims
+8. Add [ASSUMPTION] markers where assumptions are made
+9. Maintain the original meaning and structure while making it client-safe
+10. Use industry-appropriate terminology and case-type-specific language
+11. The rewritten text should ideally achieve "READY" status when re-validated
 
 Validation Criteria (apply with context-specific rigor):
 1. Freshness Risk: Flag vague time references without dates, dates older than 24 months in time-sensitive domains (laws, tariffs, sanctions, interest rates, market data). ${geography}-specific regulations and market data require current dates.
 2. Regulatory Risk: Detect regulatory keywords without jurisdiction/date context. ${geography}-specific regulations (${getGeographyRegulations(geography)}) must be explicitly referenced with dates.
-3. Evidence Risk: Flag numeric claims without sources, references to studies/research without citations. ${industry} industry data requires authoritative sources.
+3. Evidence Risk: Flag numeric claims without sources, references to studies/research without citations. ${industry} industry data requires authoritative sources. Extract and catalog all [SOURCE: ...] markers, URLs (https://...), and citations (Author, Year) found in the text for the sources array.
 4. Bain-Style Risk: Detect overconfident language ("will guarantee", "proves", "ensures") and suggest advisory alternatives. ${stakes_level} stakes require more conservative language.
 5. Bias Risk: Detect potential biases including:
    - Demographic bias (gender, race, age, nationality, religion)
@@ -599,27 +902,109 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
 
       const userPrompt = `Please validate the following draft text:\n\n${text}`
       
-      const completion = await client.chat.completions.create({
-        model: process.env.AZURE_OPENAI_DEPLOYMENT || '',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 4000,
-        response_format: { type: 'json_object' },
-      })
+      // Try with response_format first, but handle if it's not supported
+      let completion
+      try {
+        completion = await client.chat.completions.create({
+          model: process.env.AZURE_OPENAI_DEPLOYMENT || '',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 4000,
+          response_format: { type: 'json_object' },
+        })
+      } catch (formatError: any) {
+        // If response_format is not supported, try without it
+        if (formatError.message?.includes('response_format') || formatError.code === 'invalid_parameter') {
+          console.warn('[AI RESPONSE] response_format not supported, retrying without it...')
+          completion = await client.chat.completions.create({
+            model: process.env.AZURE_OPENAI_DEPLOYMENT || '',
+            messages: [
+              { role: 'system', content: systemPrompt + '\n\nCRITICAL: You MUST return ONLY valid JSON. No markdown, no code blocks, no explanations. Just the JSON object.' },
+              { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.3,
+            max_tokens: 4000,
+          })
+        } else {
+          throw formatError
+        }
+      }
       
       const responseText = completion.choices[0]?.message?.content || ''
       
-      // Parse JSON response
+      // Parse JSON response with better error handling
       let result: ValidationResult
       try {
-        result = JSON.parse(responseText)
+        // Clean the response text - remove markdown code blocks if present
+        let cleanedText = responseText.trim()
+        
+        // Remove markdown code blocks (```json ... ```)
+        if (cleanedText.startsWith('```')) {
+          cleanedText = cleanedText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '')
+        }
+        
+        // Try to extract JSON if there's extra text
+        let jsonMatch = cleanedText.match(/\{[\s\S]*\}/)
+        if (jsonMatch) {
+          cleanedText = jsonMatch[0]
+        } else {
+          // If no JSON object found, try to find any JSON structure
+          jsonMatch = cleanedText.match(/\[[\s\S]*\]/) // Array
+          if (jsonMatch) {
+            cleanedText = jsonMatch[0]
+          }
+        }
+        
+        // Final check - if still not valid JSON structure, try to fix common issues
+        if (!cleanedText.trim().startsWith('{') && !cleanedText.trim().startsWith('[')) {
+          console.warn('[AI RESPONSE] Response does not start with JSON. Attempting to find JSON...')
+          // Try to find JSON anywhere in the text
+          const allJsonMatches = cleanedText.match(/\{[\s\S]{20,}\}/g)
+          if (allJsonMatches && allJsonMatches.length > 0) {
+            cleanedText = allJsonMatches[0] // Use the first/largest match
+            console.log('[AI RESPONSE] Found JSON in text, extracted it')
+          }
+        }
+        
+        console.log(`[AI RESPONSE] Attempting to parse JSON (length: ${cleanedText.length})`)
+        console.log(`[AI RESPONSE] First 200 chars: ${cleanedText.substring(0, 200)}`)
+        console.log(`[AI RESPONSE] Last 200 chars: ${cleanedText.substring(Math.max(0, cleanedText.length - 200))}`)
+        
+        // Try parsing
+        try {
+          result = JSON.parse(cleanedText)
+        } catch (parseErr: any) {
+          // If parsing fails, try to fix common JSON issues
+          console.log('[AI RESPONSE] Initial parse failed, attempting to fix JSON...')
+          
+          // Try to fix trailing commas
+          let fixedText = cleanedText.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']')
+          
+          // Try to fix unclosed strings
+          fixedText = fixedText.replace(/(".*?)(\n)(.*?")/g, '$1 $3')
+          
+          try {
+            result = JSON.parse(fixedText)
+            console.log('[AI RESPONSE] Successfully parsed after fixing JSON')
+          } catch (fixErr) {
+            // If still fails, throw original error with more context
+            console.error('[AI RESPONSE] JSON fix also failed')
+            throw parseErr
+          }
+        }
         
         // Validate the structure
         if (!result.label || !result.findings || !result.rewritten_text) {
-          throw new Error('Invalid response structure from AI')
+          console.error('[AI RESPONSE] Missing required fields:', {
+            hasLabel: !!result.label,
+            hasFindings: !!result.findings,
+            hasRewrittenText: !!result.rewritten_text,
+            resultKeys: Object.keys(result),
+          })
+          throw new Error('Invalid response structure from AI - missing required fields')
         }
         
         // Ensure all required fields are present
@@ -632,6 +1017,8 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
           summary_next_steps: result.summary_next_steps || ['Review the draft for quality'],
           // bias_score will be calculated below based on actual findings
         }
+        
+        console.log(`[AI RESPONSE] Successfully parsed. Label: ${result.label}, Findings: ${result.findings.length}, Score: ${result.score}`)
         
         // Run bias detection using AI with multi-dimensional analysis (similar to deepeval)
         const biasResult = await detectBias(client, text, case_type, geography, industry)
@@ -771,10 +1158,48 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
           console.log('Verification step skipped:', verifyError)
         }
         
-      } catch (parseError) {
-        console.error('Failed to parse AI response:', parseError)
-        console.error('Response text:', responseText)
-        throw new Error('Failed to parse AI validation response')
+      } catch (parseError: any) {
+        console.error('[AI RESPONSE] Failed to parse AI response:', parseError)
+        console.error('[AI RESPONSE] Parse error message:', parseError.message)
+        console.error('[AI RESPONSE] Response text length:', responseText.length)
+        console.error('[AI RESPONSE] Response text (first 500 chars):', responseText.substring(0, 500))
+        console.error('[AI RESPONSE] Response text (last 500 chars):', responseText.substring(Math.max(0, responseText.length - 500)))
+        
+        // Try to provide a helpful error message
+        let errorMessage = 'Failed to parse AI validation response'
+        if (parseError.message) {
+          errorMessage += `: ${parseError.message}`
+        }
+        if (responseText.includes('```')) {
+          errorMessage += '. Response appears to be wrapped in markdown code blocks.'
+        }
+        if (!responseText.trim().startsWith('{')) {
+          errorMessage += '. Response does not start with JSON object.'
+        }
+        
+        // Try fallback: use heuristic validation
+        console.log('[AI RESPONSE] Attempting fallback result creation...')
+        try {
+          const { validateDraft, ValidationInput } = await import('@/lib/validation')
+          const input: ValidationInput = {
+            text,
+            case_type,
+            geography,
+            industry,
+            stakes_level,
+          }
+          const fallbackResult = validateDraft(input)
+          console.log('[AI RESPONSE] Using fallback heuristic validation')
+          return NextResponse.json({
+            ...fallbackResult,
+            _fallback: true,
+            _message: 'AI response parsing failed. Using heuristic validation. Check server logs for details.',
+            _aiError: parseError.message,
+          })
+        } catch (fallbackError) {
+          console.error('[AI RESPONSE] Fallback also failed:', fallbackError)
+          throw new Error(errorMessage)
+        }
       }
       
       // Final validation: Ensure bias score matches actual bias findings
@@ -810,6 +1235,78 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
       }
       
       console.log(`[FINAL RESULT] Bias score: ${result.bias_score}, Bias findings: ${finalBiasFindings.length}`)
+      
+      // Extract and catalog sources from the text
+      let extractedSources = extractSources(text, result.rewritten_text, case_type, geography, industry)
+      
+      // Enrich sources with web search for unsourced claims
+      try {
+        // Find all findings that need sources (Evidence, Freshness with dates, Regulatory)
+        const findingsNeedingSources = result.findings.filter(f => {
+          const claim = f.claim_excerpt || ''
+          const hasSource = claim.match(/\[SOURCE:/) || claim.match(/https?:\/\//)
+          const needsSource = (f.category === 'Evidence' || f.category === 'Freshness' || f.category === 'Regulatory') && !hasSource
+          return needsSource && claim.length > 20
+        })
+        
+        // Also extract numeric claims and regulatory references from text for proactive search
+        const numericClaims = extractNumericClaims(text)
+        const regulatoryClaims = extractRegulatoryClaims(text, geography)
+        
+        console.log(`[WEB SEARCH] ===== WEB SEARCH DEBUG =====`)
+        console.log(`[WEB SEARCH] SERP_API_KEY configured: ${!!process.env.SERP_API_KEY}`)
+        console.log(`[WEB SEARCH] SERP_API_KEY value: ${process.env.SERP_API_KEY ? process.env.SERP_API_KEY.substring(0, 10) + '...' : 'NOT SET'}`)
+        console.log(`[WEB SEARCH] Findings needing sources: ${findingsNeedingSources.length}`)
+        console.log(`[WEB SEARCH] Numeric claims found: ${numericClaims.length}`)
+        console.log(`[WEB SEARCH] Regulatory claims found: ${regulatoryClaims.length}`)
+        console.log(`[WEB SEARCH] Existing sources before enrichment: ${extractedSources.length}`)
+        
+        // Combine all claims that need sources
+        const allClaimsNeedingSources = [
+          ...findingsNeedingSources.map(f => ({
+            claim: f.claim_excerpt || f.rationale || '',
+            category: f.category,
+            finding: f,
+          })),
+          ...numericClaims.map(claim => ({ claim, category: 'Evidence' as const, finding: null })),
+          ...regulatoryClaims.map(claim => ({ claim, category: 'Regulatory' as const, finding: null })),
+        ].filter(item => item.claim.length > 20)
+        
+        console.log(`[WEB SEARCH] Total claims needing sources: ${allClaimsNeedingSources.length}`)
+        
+        if (allClaimsNeedingSources.length > 0 && process.env.SERP_API_KEY) {
+          // Convert to findings format for enrichment function
+          const findingsForSearch = allClaimsNeedingSources.map(item => ({
+            claim_excerpt: item.claim,
+            category: item.category,
+            rationale: item.claim,
+          }))
+          
+          extractedSources = await enrichSourcesWithWebSearch(
+            extractedSources,
+            findingsForSearch,
+            case_type,
+            geography,
+            industry
+          )
+          console.log(`[WEB SEARCH] Final sources count: ${extractedSources.length}`)
+        } else if (!process.env.SERP_API_KEY) {
+          console.log(`[WEB SEARCH] SERP_API_KEY not found in environment variables`)
+          console.log(`[WEB SEARCH] Available env vars: ${Object.keys(process.env).filter(k => k.includes('SERP') || k.includes('SEARCH')).join(', ')}`)
+        } else {
+          console.log(`[WEB SEARCH] No claims needing sources`)
+        }
+        console.log(`[WEB SEARCH] ===== END WEB SEARCH DEBUG =====`)
+      } catch (webSearchError) {
+        console.error('[WEB SEARCH] Enrichment failed:', webSearchError)
+        console.error('[WEB SEARCH] Error details:', webSearchError instanceof Error ? webSearchError.message : String(webSearchError))
+        if (webSearchError instanceof Error && webSearchError.stack) {
+          console.error('[WEB SEARCH] Stack:', webSearchError.stack)
+        }
+        // Continue with existing sources if web search fails
+      }
+      
+      result.sources = extractedSources
       
       return NextResponse.json(result)
       

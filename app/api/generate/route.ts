@@ -43,9 +43,19 @@ export async function POST(request: NextRequest) {
 Generate a professional draft that:
 - Uses advisory language (avoid "will guarantee", "proves", etc.)
 - Includes specific dates where relevant
-- Mentions sources when making claims
+- Includes inline citations with [SOURCE: description] markers for all claims
+- For numeric claims, include [SOURCE: study name or URL]
+- For regulatory references, include [SOURCE: regulation name and date]
+- For market data, include [SOURCE: data provider and date]
 - Is structured and clear
 - Is appropriate for client discussion
+
+IMPORTANT: Include [SOURCE: ...] markers inline in the text for:
+- All numeric claims (percentages, dollar amounts, statistics)
+- Regulatory references
+- Market data or industry trends
+- Research findings or studies
+- External data points
 
 Keep the draft to 300-500 words.`
       

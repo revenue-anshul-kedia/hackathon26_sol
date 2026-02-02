@@ -18,6 +18,17 @@ export interface ValidationFinding {
   recommended_owner: RecommendedOwner
 }
 
+export interface SourceReference {
+  id: string
+  url?: string
+  title?: string
+  author?: string
+  date?: string
+  excerpt?: string
+  claim_reference?: string // Which claim this source supports
+  type?: 'url' | 'citation' | 'internal' | 'study' | 'regulation'
+}
+
 export interface ValidationResult {
   label: 'READY' | 'NEEDS_SHAPING' | 'REQUIRES_REVIEW'
   score: number
@@ -27,6 +38,7 @@ export interface ValidationResult {
   findings: ValidationFinding[]
   rewritten_text: string
   summary_next_steps: string[]
+  sources?: SourceReference[] // Sources and references found in the text
 }
 
 export interface ValidationInput {

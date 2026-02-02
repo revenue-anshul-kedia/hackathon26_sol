@@ -46,9 +46,31 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
 AZURE_OPENAI_API_KEY=your-api-key
 AZURE_OPENAI_DEPLOYMENT=your-deployment-name
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
+
+# Optional: Web Search APIs (for fetching latest information and URLs)
+# Choose one of the following:
+SERP_API_KEY=your_serpapi_key
+# OR
+GOOGLE_SEARCH_API_KEY=your_google_api_key
+GOOGLE_SEARCH_ENGINE_ID=your_engine_id
+# OR
+BING_SEARCH_API_KEY=your_bing_key
 ```
 
-**Note**: If Azure OpenAI is not configured, the app will still work for validation. The draft generation feature will return a mock response.
+**Note**: 
+- If Azure OpenAI is not configured, the app will still work for validation. The draft generation feature will return a mock response.
+- Web search APIs are optional but recommended for fetching latest information and validating URLs. See `docs/WEB_SEARCH_SETUP.md` for setup instructions.
+- **SSL Certificate Issues**: If you encounter SSL certificate errors (e.g., "unable to get local issuer certificate") when using SerpAPI, the app will automatically attempt a fallback with relaxed SSL verification. This is safe for demo purposes but should be addressed in production by fixing the certificate chain.
+- **IMPORTANT**: After adding environment variables, you MUST restart the Next.js development server (`npm run dev`) for changes to take effect.
+
+### Testing Web Search
+
+To verify your SerpAPI key is working, visit:
+```
+http://localhost:3000/api/test-search?query=GDPR+fines+2024
+```
+
+This will test the web search and show you if it's working correctly.
 
 ### Running the Application
 
