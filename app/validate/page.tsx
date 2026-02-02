@@ -232,6 +232,18 @@ export default function ValidatePage() {
                       {result.label}
                     </span>
                     <span className="text-gray-600">Confidence: {result.score}%</span>
+                    {result.bias_score !== undefined && (
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        result.bias_score >= 80 
+                          ? 'bg-green-100 text-green-800' 
+                          : result.bias_score >= 60 
+                          ? 'bg-yellow-100 text-yellow-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`} title={`Bias detection confidence: ${result.bias_confidence || 'N/A'}%`}>
+                        🎯 Bias: {result.bias_score}/100
+                        {(result.bias_confidence && result.bias_confidence < 70) && ' ⚠️'}
+                      </span>
+                    )}
                     {(result as any)._fallback ? (
                       <span className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-semibold">
                         ⚠️ Heuristic Mode
@@ -262,13 +274,39 @@ export default function ValidatePage() {
                 </div>
               </div>
 
-              <div className="mb-6">
-                <div className="w-full bg-gray-200 rounded-full h-4">
-                  <div
-                    className={`h-4 rounded-full transition-all ${getLabelColor(result.label)}`}
-                    style={{ width: `${result.score}%` }}
-                  />
+              <div className="mb-6 space-y-3">
+                <div>
+                  <div className="flex justify-between text-sm text-gray-600 mb-1">
+                    <span>Overall Confidence</span>
+                    <span>{result.score}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-4">
+                    <div
+                      className={`h-4 rounded-full transition-all ${getLabelColor(result.label)}`}
+                      style={{ width: `${result.score}%` }}
+                    />
+                  </div>
                 </div>
+                {result.bias_score !== undefined && (
+                  <div>
+                    <div className="flex justify-between text-sm text-gray-600 mb-1">
+                      <span>Bias Score</span>
+                      <span>{result.bias_score}/100</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-4">
+                      <div
+                        className={`h-4 rounded-full transition-all ${
+                          result.bias_score >= 80 
+                            ? 'bg-green-500' 
+                            : result.bias_score >= 60 
+                            ? 'bg-yellow-500' 
+                            : 'bg-red-500'
+                        }`}
+                        style={{ width: `${result.bias_score}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {result.summary_next_steps.length > 0 && (
@@ -300,6 +338,7 @@ export default function ValidatePage() {
                     <option value="Regulatory">Regulatory</option>
                     <option value="Evidence">Evidence</option>
                     <option value="BainStyle">Bain Style</option>
+                    <option value="Bias">Bias</option>
                   </select>
                 </div>
                 <div>

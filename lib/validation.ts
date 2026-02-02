@@ -5,7 +5,7 @@ export type CaseType = 'Diligence' | 'Strategy' | 'Performance Transformation' |
 export type Geography = 'US' | 'EU' | 'UK' | 'India' | 'China' | 'Global'
 export type StakesLevel = 'Internal draft' | 'Client discussion' | 'Board-level'
 export type Severity = 'low' | 'medium' | 'high'
-export type Category = 'Freshness' | 'Regulatory' | 'Evidence' | 'BainStyle'
+export type Category = 'Freshness' | 'Regulatory' | 'Evidence' | 'BainStyle' | 'Bias'
 export type RecommendedOwner = 'Analyst' | 'Manager' | 'Legal/Compliance' | 'SME'
 
 export interface ValidationFinding {
@@ -21,6 +21,9 @@ export interface ValidationFinding {
 export interface ValidationResult {
   label: 'READY' | 'NEEDS_SHAPING' | 'REQUIRES_REVIEW'
   score: number
+  bias_score?: number // 0-100, where 100 = no bias detected
+  bias_confidence?: number // 0-100, confidence in bias assessment
+  bias_methodology?: string // Description of bias detection approach
   findings: ValidationFinding[]
   rewritten_text: string
   summary_next_steps: string[]

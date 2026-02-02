@@ -222,10 +222,12 @@ Refine the rewritten text to ensure:
 4. Regulatory references include jurisdiction (${geography}) and date context (${getGeographyRegulations(geography)})
 5. Numeric claims have [SOURCE NEEDED] markers or citations (${industry} industry data requires authoritative sources)
 6. Assumptions are clearly marked with [ASSUMPTION] tags
-7. The text maintains professional tone and original meaning
-8. Use ${caseType}-appropriate language and ${industry} industry terminology
-9. Apply ${stakesLevel} stakes-level rigor (${stakesLevel === 'Board-level' ? 'zero tolerance for high/medium findings' : 'appropriate level of detail'})
-10. The refined version should achieve "READY" or "NEEDS_SHAPING" status when re-validated
+7. ALL bias findings are addressed - remove demographic, geographic, cultural, or language biases
+8. Use inclusive, balanced language that represents diverse perspectives
+9. The text maintains professional tone and original meaning
+10. Use ${caseType}-appropriate language and ${industry} industry terminology
+11. Apply ${stakesLevel} stakes-level rigor (${stakesLevel === 'Board-level' ? 'zero tolerance for high/medium findings' : 'appropriate level of detail'})
+12. The refined version should achieve "READY" or "NEEDS_SHAPING" status when re-validated
 
 Context-Specific Requirements:
 - Case Type: ${caseType} - ${getCaseTypeRequirements(caseType)}
@@ -251,6 +253,212 @@ Return ONLY the refined rewritten text, no JSON, no explanations, just the impro
   } catch (error) {
     console.error('Error refining rewritten text:', error)
     return initialRewritten
+  }
+}
+
+// Detect bias in the text using AI with multi-dimensional analysis (similar to deepeval approach)
+async function detectBias(
+  client: OpenAI,
+  text: string,
+  caseType: string,
+  geography: string,
+  industry: string
+): Promise<{ score: number; findings: any[]; confidence: number; methodology: string }> {
+  const biasPrompt = `You are a bias detection expert using a rigorous, multi-dimensional analysis framework. Analyze the following text for potential biases and return JSON:
+{
+  "bias_score": number (0-100, where 100 = no bias detected, 0 = severe bias),
+  "confidence": number (0-100, how confident you are in this assessment),
+  "methodology": "brief description of analysis approach",
+  "findings": [
+    {
+      "id": "B-001",
+      "category": "Bias",
+      "severity": "low" | "medium" | "high",
+      "bias_type": "demographic" | "geographic" | "cultural" | "confirmation" | "language" | "stereotyping" | "representation" | "implicit",
+      "claim_excerpt": "exact excerpt showing bias (max 150 chars)",
+      "rationale": "detailed explanation: (1) what bias is detected, (2) why it's problematic, (3) evidence from text",
+      "suggested_fix": "specific, actionable recommendation to remove bias",
+      "recommended_owner": "Analyst" | "Manager" | "Legal/Compliance" | "SME",
+      "confidence": number (0-100, confidence in this specific finding)
+    }
+  ],
+  "bias_types_detected": ["demographic", "geographic", "cultural", "confirmation", "language", "stereotyping", etc.],
+  "analysis_notes": "brief summary of analysis methodology and key observations"
+}
+
+BIAS DETECTION FRAMEWORK - Apply systematically:
+
+1. DEMOGRAPHIC BIAS:
+   - Check for: Gender, race, age, nationality, religion, sexual orientation, disability status
+   - Indicators: Stereotypes, assumptions about capabilities, exclusionary language
+   - Evidence required: Specific words/phrases, patterns, implicit assumptions
+   - Score impact: High severity = -30 points, Medium = -15, Low = -5
+
+2. GEOGRAPHIC BIAS:
+   - Check for: Favoring certain regions/countries without justification, cultural assumptions
+   - Indicators: "Western vs Eastern", "developed vs developing", regional stereotypes
+   - Evidence required: Comparative language, value judgments, missing perspectives
+   - Score impact: High = -20, Medium = -10, Low = -5
+
+3. INDUSTRY/ECONOMIC BIAS:
+   - Check for: Favoring certain sectors/companies unfairly, economic assumptions
+   - Indicators: Unjustified preferences, missing competitor perspectives
+   - Evidence required: Selective data, unbalanced analysis
+   - Score impact: High = -15, Medium = -8, Low = -3
+
+4. CONFIRMATION BIAS:
+   - Check for: Selective use of data, cherry-picking evidence
+   - Indicators: Only supporting data cited, contradictory evidence ignored
+   - Evidence required: Missing counter-arguments, one-sided analysis
+   - Score impact: High = -25, Medium = -12, Low = -5
+
+5. CULTURAL BIAS:
+   - Check for: Assumptions about cultural norms, ethnocentrism
+   - Indicators: "Universal" claims without evidence, cultural stereotypes
+   - Evidence required: Cultural assumptions, missing cultural context
+   - Score impact: High = -20, Medium = -10, Low = -5
+
+6. LANGUAGE BIAS:
+   - Check for: Exclusionary, discriminatory, or insensitive language
+   - Indicators: Offensive terms, microaggressions, loaded language
+   - Evidence required: Specific problematic phrases, tone analysis
+   - Score impact: High = -30, Medium = -15, Low = -5
+
+7. STEREOTYPING:
+   - Check for: Generalizations about groups without evidence
+   - Indicators: "All X are Y", "Typical X behavior", group assumptions
+   - Evidence required: Generalizations, group-based claims
+   - Score impact: High = -25, Medium = -12, Low = -5
+
+8. UNBALANCED REPRESENTATION:
+   - Check for: Missing perspectives, over-representing one view
+   - Indicators: Single perspective, missing stakeholder views
+   - Evidence required: Missing viewpoints, one-sided analysis
+   - Score impact: High = -20, Medium = -10, Low = -5
+
+9. IMPLICIT ASSUMPTIONS:
+   - Check for: Hidden biases in word choice, framing, structure
+   - Indicators: Subtle language patterns, framing effects
+   - Evidence required: Word choice analysis, structural patterns
+   - Score impact: High = -15, Medium = -8, Low = -3
+
+SCORING METHODOLOGY:
+- Start at 100 (no bias)
+- Subtract points for each finding based on severity
+- Apply multiplier: High severity findings × 1.5 if multiple types detected
+- Final score: max(0, min(100, calculated_score))
+- Confidence: Based on clarity of evidence, ambiguity of text, number of findings
+
+VALIDATION CRITERIA (for trust):
+- Only flag biases with clear evidence from text
+- Distinguish between bias and legitimate business analysis
+- Provide specific excerpts as evidence
+- Explain why it's problematic (not just that it exists)
+- Consider context (${caseType} in ${geography} for ${industry})
+
+Context:
+- Case Type: ${caseType}
+- Geography: ${geography}
+- Industry: ${industry}
+
+Be thorough, fair, and evidence-based. Only flag actual biases with clear justification.
+Return ONLY valid JSON, no additional text.`
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: process.env.AZURE_OPENAI_DEPLOYMENT || '',
+      messages: [
+        { role: 'system', content: 'You are an expert bias detection analyst. Return JSON only.' },
+        { role: 'user', content: `Analyze this text for bias:\n\n${text}` },
+      ],
+      temperature: 0.2,
+      max_tokens: 2000,
+      response_format: { type: 'json_object' },
+    })
+    
+    const biasAnalysis = JSON.parse(completion.choices[0]?.message?.content || '{}')
+    
+    const findings = (biasAnalysis.findings || []).map((f: any, idx: number) => ({
+      id: f.id || `B-${String(idx + 1).padStart(3, '0')}`,
+      category: 'Bias',
+      severity: f.severity || 'medium',
+      bias_type: f.bias_type || 'implicit',
+      claim_excerpt: f.claim_excerpt || '',
+      rationale: f.rationale || '',
+      suggested_fix: f.suggested_fix || 'Review and revise to remove bias',
+      recommended_owner: f.recommended_owner || 'Manager',
+      confidence: f.confidence || 75,
+    }))
+    
+    const confidence = biasAnalysis.confidence || 75
+    
+    // Calculate score based on actual findings (don't trust AI's score if it contradicts findings)
+    let calculatedScore = 100 // Start with perfect score
+    
+    if (findings.length === 0) {
+      // No findings = perfect score
+      calculatedScore = 100
+    } else {
+      // Calculate score based on findings severity
+      const severityPenalties: Record<string, number> = {
+        'high': 25,
+        'medium': 12,
+        'low': 5,
+      }
+      
+      // Count bias types for multiplier
+      const biasTypes = new Set(findings.map((f: any) => f.bias_type || 'implicit'))
+      const multipleTypesMultiplier = biasTypes.size > 1 ? 1.3 : 1.0
+      
+      // Deduct points for each finding
+      let totalDeduction = 0
+      for (const finding of findings) {
+        const penalty = severityPenalties[finding.severity] || 12
+        totalDeduction += penalty
+      }
+      
+      // Apply multiplier if multiple bias types
+      totalDeduction = Math.floor(totalDeduction * multipleTypesMultiplier)
+      
+      // Calculate final score
+      calculatedScore = Math.max(0, 100 - totalDeduction)
+      
+      // Cross-validate with AI's score: if AI says 100 but we have findings, use our calculation
+      const aiScore = biasAnalysis.bias_score || 100
+      if (aiScore === 100 && findings.length > 0) {
+        // AI's score is wrong - use our calculated score
+        console.log(`Bias score mismatch: AI reported ${aiScore} but ${findings.length} findings detected. Using calculated score: ${calculatedScore}`)
+      } else if (Math.abs(aiScore - calculatedScore) > 20) {
+        // Large discrepancy - use weighted average but favor our calculation
+        calculatedScore = Math.floor((calculatedScore * 0.7) + (aiScore * 0.3))
+      } else {
+        // Close enough - use average
+        calculatedScore = Math.floor((calculatedScore * 0.5) + (aiScore * 0.5))
+      }
+    }
+    
+    // Apply confidence weighting: lower confidence = more conservative score
+    if (confidence < 70 && findings.length > 0) {
+      // If low confidence but findings exist, be more conservative (lower score)
+      calculatedScore = Math.max(0, calculatedScore - 5)
+    }
+    
+    // Final validation: if findings exist, score MUST be < 100
+    if (findings.length > 0 && calculatedScore >= 100) {
+      // Force score down based on findings count
+      calculatedScore = Math.max(50, 100 - (findings.length * 15))
+      console.log(`Forced bias score adjustment: ${findings.length} findings detected, setting score to ${calculatedScore}`)
+    }
+    
+    return {
+      score: Math.max(0, Math.min(100, calculatedScore)),
+      confidence,
+      methodology: biasAnalysis.methodology || biasAnalysis.analysis_notes || 'AI-based multi-dimensional bias analysis',
+      findings,
+    }
+  } catch (error) {
+    console.error('Error detecting bias:', error)
+    return { score: 100, findings: [] }
   }
 }
 
@@ -343,7 +551,7 @@ Analyze the provided draft text and return a JSON object with the following stru
   "findings": [
     {
       "id": "F-001",
-      "category": "Freshness" | "Regulatory" | "Evidence" | "BainStyle",
+      "category": "Freshness" | "Regulatory" | "Evidence" | "BainStyle" | "Bias",
       "severity": "low" | "medium" | "high",
       "claim_excerpt": "excerpt from the text (max 150 chars)",
       "rationale": "explanation of the issue with context-specific details",
@@ -371,6 +579,16 @@ Validation Criteria (apply with context-specific rigor):
 2. Regulatory Risk: Detect regulatory keywords without jurisdiction/date context. ${geography}-specific regulations (${getGeographyRegulations(geography)}) must be explicitly referenced with dates.
 3. Evidence Risk: Flag numeric claims without sources, references to studies/research without citations. ${industry} industry data requires authoritative sources.
 4. Bain-Style Risk: Detect overconfident language ("will guarantee", "proves", "ensures") and suggest advisory alternatives. ${stakes_level} stakes require more conservative language.
+5. Bias Risk: Detect potential biases including:
+   - Demographic bias (gender, race, age, nationality, religion)
+   - Geographic bias (favoring certain regions/countries)
+   - Industry bias (favoring certain sectors or companies)
+   - Confirmation bias (selective use of data)
+   - Cultural bias (assumptions about cultural norms)
+   - Language bias (exclusionary or discriminatory language)
+   - Stereotyping or generalizations without evidence
+   - Unbalanced representation of perspectives
+   Calculate a bias score (0-100, where 100 = no bias detected, 0 = severe bias).
 
 Readiness Label Rules (context-adjusted):
 - REQUIRES_REVIEW: Any high-severity finding OR ${stakes_level === 'Board-level' ? 'Board-level stakes (stricter: any medium/high findings)' : 'Client discussion with high-severity findings'}
@@ -405,13 +623,77 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
         }
         
         // Ensure all required fields are present
+        // NOTE: Don't set bias_score here - it will be calculated after collecting all bias findings
         result = {
           label: result.label || 'NEEDS_SHAPING',
           score: result.score || 50,
           findings: result.findings || [],
           rewritten_text: result.rewritten_text || text,
           summary_next_steps: result.summary_next_steps || ['Review the draft for quality'],
+          // bias_score will be calculated below based on actual findings
         }
+        
+        // Run bias detection using AI with multi-dimensional analysis (similar to deepeval)
+        const biasResult = await detectBias(client, text, case_type, geography, industry)
+        
+        // Collect ALL bias findings (from main validation + dedicated bias detection)
+        const allBiasFindings = [
+          ...result.findings.filter(f => f.category === 'Bias'),
+          ...biasResult.findings
+        ]
+        
+        // Remove duplicate bias findings from main result
+        result.findings = result.findings.filter(f => f.category !== 'Bias')
+        
+        // Add all unique bias findings
+        const uniqueBiasFindings = allBiasFindings.filter((finding, index, self) =>
+          index === self.findIndex(f => f.claim_excerpt === finding.claim_excerpt)
+        )
+        result.findings.push(...uniqueBiasFindings)
+        
+        // Recalculate bias score based on ALL bias findings
+        let finalBiasScore = 100
+        if (uniqueBiasFindings.length > 0) {
+          const severityPenalties: Record<string, number> = {
+            'high': 25,
+            'medium': 12,
+            'low': 5,
+          }
+          
+          const biasTypes = new Set(uniqueBiasFindings.map(f => (f as any).bias_type || 'implicit'))
+          const multipleTypesMultiplier = biasTypes.size > 1 ? 1.3 : 1.0
+          
+          let totalDeduction = 0
+          for (const finding of uniqueBiasFindings) {
+            const penalty = severityPenalties[finding.severity] || 12
+            totalDeduction += penalty
+          }
+          
+          totalDeduction = Math.floor(totalDeduction * multipleTypesMultiplier)
+          finalBiasScore = Math.max(0, 100 - totalDeduction)
+          
+          console.log(`Bias score calculated: ${uniqueBiasFindings.length} findings, ${totalDeduction} points deducted, final score: ${finalBiasScore}`)
+        } else {
+          // No bias findings = perfect score
+          finalBiasScore = 100
+        }
+        
+        // Use the recalculated score (not the AI's potentially incorrect score)
+        result.bias_score = finalBiasScore
+        
+        // Debug logging to verify score calculation
+        console.log(`[BIAS SCORE] Calculated: ${finalBiasScore} from ${uniqueBiasFindings.length} findings`)
+        if (uniqueBiasFindings.length > 0 && finalBiasScore === 100) {
+          console.error(`[BIAS SCORE ERROR] Findings detected but score is 100!`, uniqueBiasFindings.map(f => ({ 
+            id: f.id, 
+            severity: f.severity, 
+            excerpt: f.claim_excerpt?.substring(0, 50) 
+          })))
+        }
+        
+        // Store bias metadata for transparency
+        ;(result as any).bias_confidence = biasResult.confidence
+        ;(result as any).bias_methodology = biasResult.methodology
         
         // Validate and refine the rewritten text to ensure it addresses all findings
         const refinedRewritten = await refineRewrittenText(
@@ -426,6 +708,43 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
         )
         
         result.rewritten_text = refinedRewritten
+        
+        // Re-check bias on rewritten text to ensure improvement
+        const rewrittenBiasResult = await detectBias(client, refinedRewritten, case_type, geography, industry)
+        
+        // Collect bias findings from rewritten text
+        const rewrittenBiasFindings = rewrittenBiasResult.findings
+        
+        // Recalculate score based on rewritten text bias findings
+        let rewrittenBiasScore = 100
+        if (rewrittenBiasFindings.length > 0) {
+          const severityPenalties: Record<string, number> = {
+            'high': 25,
+            'medium': 12,
+            'low': 5,
+          }
+          
+          const biasTypes = new Set(rewrittenBiasFindings.map(f => (f as any).bias_type || 'implicit'))
+          const multipleTypesMultiplier = biasTypes.size > 1 ? 1.3 : 1.0
+          
+          let totalDeduction = 0
+          for (const finding of rewrittenBiasFindings) {
+            const penalty = severityPenalties[finding.severity] || 12
+            totalDeduction += penalty
+          }
+          
+          totalDeduction = Math.floor(totalDeduction * multipleTypesMultiplier)
+          rewrittenBiasScore = Math.max(0, 100 - totalDeduction)
+        }
+        
+        // Use the better score (higher = less bias) - but don't overwrite if original was already calculated correctly
+        // Only update if rewritten text has fewer bias issues
+        if (rewrittenBiasScore > (result.bias_score || 0)) {
+          result.bias_score = rewrittenBiasScore
+          console.log(`Bias score improved in rewritten text: ${result.bias_score} -> ${rewrittenBiasScore}`)
+        } else {
+          console.log(`Bias score from original text maintained: ${result.bias_score} (rewritten: ${rewrittenBiasScore})`)
+        }
         
         // Verify the rewritten text would pass validation (optional check)
         try {
@@ -457,6 +776,40 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
         console.error('Response text:', responseText)
         throw new Error('Failed to parse AI validation response')
       }
+      
+      // Final validation: Ensure bias score matches actual bias findings
+      const finalBiasFindings = result.findings.filter(f => f.category === 'Bias')
+      if (finalBiasFindings.length > 0) {
+        // Recalculate one more time to be absolutely sure
+        const severityPenalties: Record<string, number> = {
+          'high': 25,
+          'medium': 12,
+          'low': 5,
+        }
+        
+        const biasTypes = new Set(finalBiasFindings.map(f => (f as any).bias_type || 'implicit'))
+        const multipleTypesMultiplier = biasTypes.size > 1 ? 1.3 : 1.0
+        
+        let totalDeduction = 0
+        for (const finding of finalBiasFindings) {
+          const penalty = severityPenalties[finding.severity] || 12
+          totalDeduction += penalty
+        }
+        
+        totalDeduction = Math.floor(totalDeduction * multipleTypesMultiplier)
+        const recalculatedScore = Math.max(0, 100 - totalDeduction)
+        
+        // Force the correct score
+        if (result.bias_score !== recalculatedScore) {
+          console.log(`[BIAS SCORE FIX] Correcting score from ${result.bias_score} to ${recalculatedScore} (${finalBiasFindings.length} findings)`)
+          result.bias_score = recalculatedScore
+        }
+      } else if (result.bias_score === undefined) {
+        // No bias findings = perfect score
+        result.bias_score = 100
+      }
+      
+      console.log(`[FINAL RESULT] Bias score: ${result.bias_score}, Bias findings: ${finalBiasFindings.length}`)
       
       return NextResponse.json(result)
       
