@@ -55,6 +55,12 @@ GOOGLE_SEARCH_API_KEY=your_google_api_key
 GOOGLE_SEARCH_ENGINE_ID=your_engine_id
 # OR
 BING_SEARCH_API_KEY=your_bing_key
+
+# Optional: SSL Verification (for corporate environments with proxy/firewall)
+# Set to '1' to bypass SSL certificate verification for SerpAPI and web page fetching
+# WARNING: Only use for demo/development. Not recommended for production.
+SKIP_SSL_VERIFICATION=0
+# Alternative: You can also use ALLOW_INSECURE_SSL=1 or NODE_TLS_REJECT_UNAUTHORIZED=0
 ```
 
 **Note**: 

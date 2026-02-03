@@ -322,13 +322,36 @@ function findClaimReference(sourceMarker: string, text: string): string | undefi
   if (markerIndex === -1) return undefined
   
   const start = Math.max(0, markerIndex - 50)
-  const end = Math.min(text.length, markerIndex + sourceMarker.length + 100)
+  const end = Math.min(text.length, markerIndex + sourceMarker.length + 200) // Increased to capture full URLs
   const context = text.substring(start, end)
   
   const sentences = context.split(/[.!?]+/)
-  const relevantSentence = sentences.find(s => s.includes(sourceMarker)) || context.substring(0, 100)
+  let relevantSentence = sentences.find(s => s.includes(sourceMarker)) || context
   
-  return relevantSentence.trim().substring(0, 150)
+  // Check if there's a URL in the sentence - if so, preserve the full URL
+  const urlPattern = /https?:\/\/[^\s\)]+/gi
+  const urlMatch = relevantSentence.match(urlPattern)
+  
+  if (urlMatch && urlMatch.length > 0) {
+    // If URL is present, ensure we include the full URL even if it exceeds 150 chars
+    // Find the position of the URL and extend the excerpt to include it fully
+    const urlStart = relevantSentence.indexOf(urlMatch[0])
+    const urlEnd = urlStart + urlMatch[0].length
+    const beforeUrl = relevantSentence.substring(0, urlStart).trim()
+    const afterUrl = relevantSentence.substring(urlEnd).trim()
+    
+    // Preserve full URL, but limit surrounding text
+    const maxBefore = Math.min(100, beforeUrl.length)
+    const maxAfter = Math.min(50, afterUrl.length)
+    relevantSentence = beforeUrl.substring(beforeUrl.length - maxBefore) + 
+                       urlMatch[0] + 
+                       afterUrl.substring(0, maxAfter)
+  } else {
+    // No URL, use standard truncation
+    relevantSentence = relevantSentence.trim().substring(0, 200) // Increased from 150
+  }
+  
+  return relevantSentence.trim()
 }
 
 // Extract numeric claims from text for proactive source search
@@ -422,7 +445,7 @@ async function enrichSourcesWithWebSearch(
             url: result.url,
             title: result.title,
             excerpt: result.snippet,
-            claim_reference: claim.substring(0, 150),
+            claim_reference: claim, // Don't truncate - preserve full claim including URLs
             type: 'url',
             date: result.date,
             source: result.source,
@@ -503,6 +526,483 @@ function extractKeyTermsFromClaim(claim: string, industry: string, geography: st
     .slice(0, 5) // Top 5 keywords
   
   return words.join(' ') || claim.substring(0, 100)
+}
+
+// Extract text content from HTML (basic implementation)
+function extractTextFromHTML(html: string): string {
+  // Remove script and style tags
+  let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+  
+  // Remove HTML tags but preserve structure
+  text = text.replace(/<[^>]+>/g, ' ')
+  
+  // Decode HTML entities
+  text = text
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+  
+  // Clean up whitespace
+  text = text.replace(/\s+/g, ' ').trim()
+  
+  // Limit to reasonable size (first 15000 chars for AI processing)
+  return text.substring(0, 15000)
+}
+
+// Fetch HTML content using Node.js https/http module (fallback for SSL issues)
+async function fetchHtmlWithHttps(
+  urlString: string,
+  agent: any,
+  httpModule: any,
+  httpsModule: any
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlString)
+    const isHttps = url.protocol === 'https:'
+    const module = isHttps ? httpsModule : httpModule
+    
+    const options: any = {
+      hostname: url.hostname,
+      port: url.port || (isHttps ? 443 : 80),
+      path: url.pathname + url.search,
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; BainValidator/1.0)',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+      timeout: 10000,
+    }
+    
+    if (isHttps && agent) {
+      options.agent = agent
+    }
+
+    const req = module.request(options, (res: any) => {
+      let data = ''
+
+      res.on('data', (chunk: any) => {
+        data += chunk
+      })
+
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(data)
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`))
+        }
+      })
+    })
+
+    req.on('error', (error: any) => {
+      reject(error)
+    })
+
+    req.on('timeout', () => {
+      req.destroy()
+      reject(new Error('Request timeout'))
+    })
+
+    req.setTimeout(10000)
+    req.end()
+  })
+}
+
+// Validate and match sources to claims using SerpAPI, fetch web pages, and AI validation
+async function validateAndMatchSources(
+  client: OpenAI,
+  originalText: string,
+  sources: SourceReference[],
+  caseType: string,
+  geography: string,
+  industry: string
+): Promise<SourceReference[]> {
+  const { searchWeb } = await import('@/lib/web-search')
+  const validatedSources: SourceReference[] = []
+  
+  console.log(`[SOURCE VALIDATION] ===== STARTING SOURCE VALIDATION =====`)
+  console.log(`[SOURCE VALIDATION] Validating ${sources.length} sources`)
+  
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i]
+    const validatedSource = { ...source }
+    
+    try {
+      // Extract the claim this source is supposed to support
+      const claim = source.claim_reference || ''
+      
+      if (!claim || claim.length < 10) {
+        console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Skipping - no claim reference`)
+        validatedSources.push(validatedSource)
+        continue
+      }
+      
+      console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Validating source: ${source.title || source.url || 'Unknown'}`)
+      console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Claim: "${claim.substring(0, 100)}..."`)
+      
+      // Step 1: Search for the source using SerpAPI
+      let searchQuery = ''
+      let searchResults: any[] = []
+      let sourceUrl = source.url
+      let pageContent = ''
+      let pageTitle = source.title || ''
+      let pageExcerpt = source.excerpt || ''
+      
+      if (source.url) {
+        // If we have a URL, use it directly
+        sourceUrl = source.url
+        console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Source URL provided: ${sourceUrl}`)
+      } else if (source.title) {
+        // Search for the source by title
+        searchQuery = source.title
+        console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Searching for source: "${searchQuery}"`)
+        
+        try {
+          searchResults = await searchWeb({
+            query: searchQuery,
+            geography,
+            maxResults: 3, // Get top 3 results
+          })
+          console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Found ${searchResults.length} search results`)
+          
+          // Use the first result as the source URL
+          if (searchResults.length > 0) {
+            sourceUrl = searchResults[0].url
+            pageTitle = searchResults[0].title || pageTitle
+            pageExcerpt = searchResults[0].snippet || pageExcerpt
+            console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Using search result: ${sourceUrl}`)
+          }
+        } catch (searchError) {
+          console.error(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Web search failed:`, searchError)
+        }
+      } else {
+        // Use claim to search for the source
+        searchQuery = `${claim.substring(0, 100)} ${industry} ${geography}`
+        console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Searching by claim: "${searchQuery}"`)
+        
+        try {
+          searchResults = await searchWeb({
+            query: searchQuery,
+            geography,
+            maxResults: 3,
+          })
+          console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Found ${searchResults.length} search results`)
+          
+          if (searchResults.length > 0) {
+            sourceUrl = searchResults[0].url
+            pageTitle = searchResults[0].title || pageTitle
+            pageExcerpt = searchResults[0].snippet || pageExcerpt
+            console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Using search result: ${sourceUrl}`)
+          }
+        } catch (searchError) {
+          console.error(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Web search failed:`, searchError)
+        }
+      }
+      
+      // Step 2: Fetch the web page content
+      if (sourceUrl) {
+        try {
+          console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Fetching web page: ${sourceUrl}`)
+          
+          let html = ''
+          let fetchSucceeded = false
+          
+          // Check if SSL verification should be bypassed via environment variable
+          const skipSSLVerification = process.env.SKIP_SSL_VERIFICATION === '1' || 
+                                      process.env.ALLOW_INSECURE_SSL === '1' ||
+                                      process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0'
+          
+          if (skipSSLVerification) {
+            // Always use HTTPS fallback (skip SSL verification)
+            console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Using HTTPS fallback (SKIP_SSL_VERIFICATION enabled)`)
+            try {
+              const https = await import('https')
+              const http = await import('http')
+              const httpsAgent = new https.Agent({
+                rejectUnauthorized: false, // Skip SSL verification
+              })
+              
+              html = await fetchHtmlWithHttps(sourceUrl, httpsAgent, http, https)
+              fetchSucceeded = true
+              console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] ✅ Fetched ${html.length} chars via HTTPS fallback`)
+            } catch (httpsError: any) {
+              console.error(`[SOURCE VALIDATION] [${i+1}/${sources.length}] HTTPS fallback failed:`, httpsError.message)
+              html = ''
+            }
+          } else {
+            // Try standard fetch first, then fallback on SSL errors
+            try {
+              const fetchResponse = await fetch(sourceUrl, {
+                headers: {
+                  'User-Agent': 'Mozilla/5.0 (compatible; BainValidator/1.0)',
+                  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                },
+                signal: AbortSignal.timeout(10000), // 10 second timeout
+              })
+              
+              if (!fetchResponse.ok) {
+                throw new Error(`HTTP ${fetchResponse.status}: ${fetchResponse.statusText}`)
+              }
+              
+              html = await fetchResponse.text()
+              fetchSucceeded = true
+              console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] ✅ Fetched ${html.length} chars via standard fetch`)
+              
+            } catch (fetchError: any) {
+              // Log full error for debugging
+              console.error(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Fetch error:`, {
+                message: fetchError?.message,
+                code: fetchError?.code,
+                cause: fetchError?.cause ? {
+                  message: fetchError.cause?.message,
+                  code: fetchError.cause?.code,
+                } : undefined,
+              })
+              
+              // Check if it's an SSL certificate error
+              const errorCode = fetchError?.code || fetchError?.cause?.code
+              const errorMessage = (fetchError?.message || fetchError?.cause?.message || '').toLowerCase()
+              const causeMessage = (fetchError?.cause?.message || '').toLowerCase()
+              
+              // More aggressive SSL error detection - "fetch failed" often indicates SSL issues for HTTPS URLs
+              const isSSLError = 
+                errorCode === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' ||
+                errorCode === 'CERT_HAS_EXPIRED' ||
+                errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' ||
+                errorMessage.includes('certificate') ||
+                errorMessage.includes('unable to get local issuer') ||
+                (errorMessage.includes('fetch failed') && (causeMessage.includes('certificate') || fetchError?.cause?.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY')) ||
+                causeMessage.includes('certificate') ||
+                causeMessage.includes('unable to get local issuer')
+              
+              // For HTTPS URLs, "fetch failed" without timeout/network errors is likely SSL-related
+              const isHttpsUrl = sourceUrl.startsWith('https://')
+              const isLikelySSLError = isHttpsUrl && 
+                                       errorMessage === 'fetch failed' && 
+                                       !errorMessage.includes('timeout') && 
+                                       !errorMessage.includes('network') &&
+                                       !errorMessage.includes('dns')
+              
+              if (isSSLError || isLikelySSLError) {
+                console.warn(`[SOURCE VALIDATION] [${i+1}/${sources.length}] SSL certificate error or fetch failure detected. Attempting HTTPS fallback...`)
+                
+                // Try with HTTPS module using custom agent
+                try {
+                  const https = await import('https')
+                  const http = await import('http')
+                  const httpsAgent = new https.Agent({
+                    rejectUnauthorized: false, // Allow insecure SSL for demo (corporate proxy/firewall scenarios)
+                  })
+                  
+                  html = await fetchHtmlWithHttps(sourceUrl, httpsAgent, http, https)
+                  fetchSucceeded = true
+                  console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] ✅ Fetched ${html.length} chars via HTTPS fallback`)
+                } catch (httpsError: any) {
+                  console.error(`[SOURCE VALIDATION] [${i+1}/${sources.length}] HTTPS fallback also failed:`, httpsError.message)
+                  // Continue without page content
+                  html = ''
+                }
+              } else {
+                // Not an SSL error, log and continue without content
+                console.error(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Fetch failed (non-SSL error):`, fetchError.message)
+                html = ''
+              }
+            }
+          }
+          
+          // Process HTML content if we successfully fetched it
+          if (html && fetchSucceeded) {
+            // Extract text content from HTML
+            pageContent = extractTextFromHTML(html)
+            
+            // Extract title if not already set
+            if (!pageTitle) {
+              const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i)
+              if (titleMatch) {
+                pageTitle = titleMatch[1].trim()
+                validatedSource.title = pageTitle
+              }
+            }
+            
+            // Extract meta description for excerpt
+            if (!pageExcerpt) {
+              const metaMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
+              if (metaMatch) {
+                pageExcerpt = metaMatch[1].trim()
+                validatedSource.excerpt = pageExcerpt
+              }
+            }
+            
+            // Update source with fetched URL if it was from search
+            if (!validatedSource.url && sourceUrl) {
+              validatedSource.url = sourceUrl
+            }
+            
+            console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] ✅ Processed ${pageContent.length} characters of content`)
+          } else {
+            console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] ⚠️ Could not fetch page content, will validate using metadata only`)
+          }
+          
+        } catch (error: any) {
+          console.error(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Error fetching page:`, error.message)
+          // Continue with AI validation using available info
+          pageContent = ''
+        }
+      } else {
+        console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] No URL available, skipping fetch`)
+      }
+      
+      // Step 3: Use AI to validate the claim against the fetched content
+      if (sourceUrl || pageContent.length > 0 || searchResults.length > 0) {
+        const validationPrompt = `You are a source validation expert. Validate if a claim in a draft document is inline with the actual source content and not ambiguous.
+
+SOURCE INFORMATION:
+URL: ${sourceUrl || source.url || 'No URL provided'}
+Title: ${pageTitle || source.title || 'Not available'}
+${source.author ? `Author: ${source.author}` : ''}
+${source.date ? `Date: ${source.date}` : ''}
+
+CLAIM FROM DRAFT THAT SHOULD BE SUPPORTED:
+"${claim}"
+
+${pageContent.length > 0 ? `ACTUAL WEB PAGE CONTENT (fetched from source):
+${pageContent.substring(0, 12000)}
+${pageContent.length > 12000 ? '\n[... content truncated for analysis ...]' : ''}` : ''}
+
+${pageContent.length === 0 && searchResults.length > 0 ? `SEARCH RESULTS FOUND (source content not available, using search snippets):
+${searchResults.map((r, idx) => `${idx + 1}. ${r.title}
+   URL: ${r.url}
+   Snippet: ${r.snippet}
+   ${r.date ? `Date: ${r.date}` : ''}`).join('\n\n')}` : ''}
+
+${pageContent.length === 0 && searchResults.length === 0 ? 'NOTE: Could not fetch web page content or find search results. Validating based on available metadata only.' : ''}
+
+Analyze and return JSON:
+{
+  "is_valid": boolean,
+  "is_ambiguous": boolean,
+  "match_confidence": number (0-100),
+  "validation_status": "correct" | "incorrect" | "ambiguous" | "not_found" | "partial_match" | "content_unavailable",
+  "issues": [
+    "specific issue 1 - e.g., claim does not match source content",
+    "specific issue 2 - e.g., claim is misleading or out of context"
+  ],
+  "exact_references_found": [
+    "exact quote or reference from the web page that supports the claim (include page context)",
+    "another relevant reference with specific page location/context"
+  ],
+  "additional_resources": [
+    {
+      "title": "title of additional resource",
+      "url": "url if available",
+      "relevance": "high" | "medium" | "low",
+      "reason": "why this is relevant"
+    }
+  ],
+  "claim_accuracy": {
+    "matches_content": boolean,
+    "accuracy_score": number (0-100),
+    "discrepancies": [
+      "specific discrepancy between claim and source content"
+    ],
+    "supporting_evidence": [
+      "specific evidence from source that supports the claim"
+    ]
+  },
+  "ambiguity_analysis": {
+    "is_ambiguous": boolean,
+    "ambiguity_reasons": [
+      "reason why the reference might be ambiguous (e.g., multiple interpretations, unclear context)"
+    ],
+    "clarity_score": number (0-100)
+  },
+  "validation_notes": "detailed explanation of validation including specific page references and whether the draft is inline with the source"
+}
+
+VALIDATION CRITERIA:
+1. Check if the claim accurately reflects what's stated in the web page content
+2. Verify the claim is not misleading or taken out of context
+3. Check if the reference is ambiguous (could refer to multiple sources or interpretations)
+4. Identify exact quotes/references from the page that support or contradict the claim
+5. Assess if the claim is inline with the source (not contradictory)
+6. Check for any discrepancies between the claim and the actual content
+7. For ${caseType} in ${geography} for ${industry}, ensure claims are appropriate and accurate
+8. Determine if the draft is inline with the reference (consistent, accurate, not misleading)
+
+Return ONLY valid JSON.`
+
+        try {
+          const validationCompletion = await client.chat.completions.create({
+            model: process.env.AZURE_OPENAI_DEPLOYMENT || '',
+            messages: [
+              { role: 'system', content: 'You are a source validation expert. Return JSON only.' },
+              { role: 'user', content: validationPrompt },
+            ],
+            temperature: 0.2, // Low temperature for accurate validation
+            max_tokens: 2000, // Increased for detailed validation with page content
+            response_format: { type: 'json_object' },
+          })
+          
+          const validationResult = JSON.parse(validationCompletion.choices[0]?.message?.content || '{}')
+          
+          // Update source with validation results
+          validatedSource.validation_status = validationResult.validation_status || 'unknown'
+          validatedSource.is_valid = validationResult.is_valid !== false
+          validatedSource.is_ambiguous = validationResult.is_ambiguous === true
+          validatedSource.match_confidence = validationResult.match_confidence || 0
+          validatedSource.validation_issues = validationResult.issues || []
+          validatedSource.exact_references = validationResult.exact_references_found || []
+          validatedSource.additional_resources = validationResult.additional_resources || []
+          validatedSource.validation_notes = validationResult.validation_notes
+          
+          // Update with recommended source if provided
+          if (validationResult.recommended_source) {
+            if (validationResult.recommended_source.url && !validatedSource.url) {
+              validatedSource.url = validationResult.recommended_source.url
+            }
+            if (validationResult.recommended_source.title && !validatedSource.title) {
+              validatedSource.title = validationResult.recommended_source.title
+            }
+            if (validationResult.recommended_source.excerpt) {
+              validatedSource.excerpt = validationResult.recommended_source.excerpt
+            }
+          }
+          
+          // If validation found issues, add a finding
+          if (validationResult.issues && validationResult.issues.length > 0) {
+            console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Issues found: ${validationResult.issues.length}`)
+          }
+          
+          console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Validation complete: ${validationResult.validation_status}, confidence: ${validationResult.match_confidence}%`)
+          
+        } catch (aiError: any) {
+          console.error(`[SOURCE VALIDATION] [${i+1}/${sources.length}] AI validation failed:`, aiError.message)
+          // Continue with source as-is if AI validation fails
+        }
+      } else {
+        console.log(`[SOURCE VALIDATION] [${i+1}/${sources.length}] No search results found, skipping AI validation`)
+      }
+      
+      // Rate limiting: small delay between validations
+      if (i < sources.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300))
+      }
+      
+      validatedSources.push(validatedSource)
+      
+    } catch (error: any) {
+      console.error(`[SOURCE VALIDATION] [${i+1}/${sources.length}] Error validating source:`, error.message)
+      // Add source as-is if validation fails
+      validatedSources.push(validatedSource)
+    }
+  }
+  
+  console.log(`[SOURCE VALIDATION] ===== SOURCE VALIDATION COMPLETE =====`)
+  return validatedSources
 }
 
 // Initialize Azure OpenAI client
@@ -612,7 +1112,7 @@ async function detectBias(
       "category": "Bias",
       "severity": "low" | "medium" | "high",
       "bias_type": "demographic" | "geographic" | "cultural" | "confirmation" | "language" | "stereotyping" | "representation" | "implicit",
-      "claim_excerpt": "exact excerpt showing bias (max 150 chars)",
+      "claim_excerpt": "exact excerpt showing bias (preserve full URLs even if they exceed 150 chars - do NOT truncate URLs, max 300 chars for text with URLs, 150 chars for text without URLs)",
       "rationale": "detailed explanation: (1) what bias is detected, (2) why it's problematic, (3) evidence from text",
       "suggested_fix": "specific, actionable recommendation to remove bias",
       "recommended_owner": "Analyst" | "Manager" | "Legal/Compliance" | "SME",
@@ -890,7 +1390,7 @@ Analyze the provided draft text and return a JSON object with the following stru
       "id": "F-001",
       "category": "Freshness" | "Regulatory" | "Evidence" | "BainStyle" | "Bias",
       "severity": "low" | "medium" | "high",
-      "claim_excerpt": "excerpt from the text (max 150 chars)",
+      "claim_excerpt": "excerpt from the text (preserve full URLs even if they exceed 150 chars - do NOT truncate URLs, max 300 chars for text with URLs, 150 chars for text without URLs)",
       "rationale": "explanation of the issue with context-specific details",
       "suggested_fix": "specific recommendation tailored to the context",
       "recommended_owner": "Analyst" | "Manager" | "Legal/Compliance" | "SME"
@@ -1065,6 +1565,35 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
           summary_next_steps: result.summary_next_steps || ['Review the draft for quality'],
           // bias_score will be calculated below based on actual findings
         }
+        
+        // Post-process findings to fix truncated URLs in claim_excerpts
+        // Check if any claim_excerpt contains a truncated URL and try to find the full URL from the original text
+        result.findings = result.findings.map(finding => {
+          const claimExcerpt = finding.claim_excerpt || ''
+          const urlPattern = /https?:\/\/[^\s\)]*/gi
+          const truncatedUrlMatch = claimExcerpt.match(urlPattern)
+          
+          if (truncatedUrlMatch && truncatedUrlMatch.length > 0) {
+            // Check if URL appears truncated (doesn't end with common URL endings)
+            const truncatedUrl = truncatedUrlMatch[0]
+            const commonEndings = ['.com', '.org', '.net', '.edu', '.gov', '.in', '.uk', '/', '?', '&']
+            const appearsTruncated = !commonEndings.some(ending => truncatedUrl.endsWith(ending)) && truncatedUrl.length < 50
+            
+            if (appearsTruncated) {
+              // Try to find the full URL in the original text
+              const fullUrlPattern = new RegExp(truncatedUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[^\\s\\)]*', 'gi')
+              const fullUrlMatch = text.match(fullUrlPattern)
+              
+              if (fullUrlMatch && fullUrlMatch[0] && fullUrlMatch[0].length > truncatedUrl.length) {
+                // Replace truncated URL with full URL
+                finding.claim_excerpt = claimExcerpt.replace(truncatedUrl, fullUrlMatch[0])
+                console.log(`[URL FIX] Fixed truncated URL in finding ${finding.id}: ${truncatedUrl} -> ${fullUrlMatch[0]}`)
+              }
+            }
+          }
+          
+          return finding
+        })
         
         console.log(`[AI RESPONSE] Successfully parsed. Label: ${result.label}, Findings: ${result.findings.length}, Score: ${result.score}`)
         
@@ -1287,6 +1816,25 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
       // Extract and catalog sources from the text
       let extractedSources = extractSources(text, result.rewritten_text, case_type, geography, industry)
       
+      // Validate and match sources to claims using SerpAPI and AI
+      if (extractedSources.length > 0 && process.env.SERP_API_KEY) {
+        try {
+          console.log(`[SOURCE VALIDATION] Starting validation for ${extractedSources.length} sources`)
+          extractedSources = await validateAndMatchSources(
+            client,
+            text,
+            extractedSources,
+            case_type,
+            geography,
+            industry
+          )
+          console.log(`[SOURCE VALIDATION] Completed validation for ${extractedSources.length} sources`)
+        } catch (sourceValidationError) {
+          console.error('[SOURCE VALIDATION] Error during source validation:', sourceValidationError)
+          // Continue with unvalidated sources if validation fails
+        }
+      }
+      
       // Enrich sources with web search for unsourced claims
       try {
         // Find all findings that need sources (Evidence, Freshness with dates, Regulatory)
@@ -1355,6 +1903,9 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
       }
       
       result.sources = extractedSources
+      
+      // Note: Source validation issues are displayed in the Sources & References section of the UI
+      // We don't add them to the findings table to avoid duplication
       
       return NextResponse.json(result)
       

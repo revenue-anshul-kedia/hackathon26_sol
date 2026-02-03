@@ -26,7 +26,21 @@ export interface SourceReference {
   date?: string
   excerpt?: string
   claim_reference?: string // Which claim this source supports
-  type?: 'url' | 'citation' | 'internal' | 'study' | 'regulation'
+  type?: 'url' | 'citation' | 'internal' | 'study' | 'regulation' | 'web_search'
+  // Validation fields
+  validation_status?: 'correct' | 'incorrect' | 'ambiguous' | 'not_found' | 'partial_match' | 'unknown'
+  is_valid?: boolean
+  is_ambiguous?: boolean
+  match_confidence?: number // 0-100
+  validation_issues?: string[]
+  exact_references?: string[] // Exact quotes/references from source that support the claim
+  additional_resources?: Array<{
+    title: string
+    url?: string
+    relevance: 'high' | 'medium' | 'low'
+    reason: string
+  }>
+  validation_notes?: string
 }
 
 export interface ValidationResult {

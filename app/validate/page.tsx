@@ -418,52 +418,135 @@ export default function ValidatePage() {
               <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
                 <h2 className="text-2xl font-bold text-gray-800 mb-4">Sources & References</h2>
                 <p className="text-sm text-gray-600 mb-4">
-                  {result.sources.length} source(s) identified in the draft
+                  {result.sources.length} source(s) identified and validated
                 </p>
                 <div className="space-y-4">
-                  {result.sources.map((source) => (
-                    <div key={source.id} className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-mono text-xs text-gray-600">{source.id}</span>
-                            {source.type && (
-                              <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">
-                                {source.type}
-                              </span>
+                  {result.sources.map((source) => {
+                    const validationStatus = (source as any).validation_status
+                    const isAmbiguous = (source as any).is_ambiguous
+                    const matchConfidence = (source as any).match_confidence
+                    const validationIssues = (source as any).validation_issues || []
+                    const exactReferences = (source as any).exact_references || []
+                    const additionalResources = (source as any).additional_resources || []
+                    const validationNotes = (source as any).validation_notes
+                    
+                    return (
+                      <div key={source.id} className={`p-4 border rounded-lg ${
+                        validationStatus === 'correct' ? 'border-green-300 bg-green-50' :
+                        validationStatus === 'incorrect' ? 'border-red-300 bg-red-50' :
+                        validationStatus === 'ambiguous' ? 'border-yellow-300 bg-yellow-50' :
+                        validationStatus === 'partial_match' ? 'border-orange-300 bg-orange-50' :
+                        'border-blue-200 bg-blue-50'
+                      }`}>
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className="font-mono text-xs text-gray-600">{source.id}</span>
+                              {source.type && (
+                                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">
+                                  {source.type}
+                                </span>
+                              )}
+                              {validationStatus && validationStatus !== 'unknown' && (
+                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  validationStatus === 'correct' ? 'bg-green-100 text-green-800' :
+                                  validationStatus === 'incorrect' ? 'bg-red-100 text-red-800' :
+                                  validationStatus === 'ambiguous' ? 'bg-yellow-100 text-yellow-800' :
+                                  validationStatus === 'partial_match' ? 'bg-orange-100 text-orange-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {validationStatus}
+                                  {matchConfidence !== undefined && ` (${matchConfidence}%)`}
+                                </span>
+                              )}
+                              {isAmbiguous && (
+                                <span className="px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                  ⚠️ Ambiguous
+                                </span>
+                              )}
+                            </div>
+                            {source.title && (
+                              <h4 className="font-semibold text-gray-800 mb-1">{source.title}</h4>
                             )}
-                          </div>
-                          {source.title && (
-                            <h4 className="font-semibold text-gray-800 mb-1">{source.title}</h4>
-                          )}
-                          {source.url && (
-                            <a
-                              href={source.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:text-blue-800 text-sm break-all"
-                            >
-                              {source.url}
-                            </a>
-                          )}
-                          <div className="mt-2 text-sm text-gray-600 space-y-1">
-                            {source.author && <div><strong>Author:</strong> {source.author}</div>}
-                            {source.date && <div><strong>Date:</strong> {source.date}</div>}
-                            {source.excerpt && (
-                              <div className="mt-2 italic text-gray-700">
-                                "{source.excerpt}"
-                              </div>
+                            {source.url && (
+                              <a
+                                href={source.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:text-blue-800 text-sm break-all"
+                              >
+                                {source.url}
+                              </a>
                             )}
-                            {source.claim_reference && (
-                              <div className="mt-2 text-xs text-gray-500">
-                                <strong>Referenced in:</strong> {source.claim_reference}
+                            <div className="mt-2 text-sm text-gray-600 space-y-1">
+                              {source.author && <div><strong>Author:</strong> {source.author}</div>}
+                              {source.date && <div><strong>Date:</strong> {source.date}</div>}
+                              {source.excerpt && (
+                                <div className="mt-2 italic text-gray-700">
+                                  "{source.excerpt}"
+                                </div>
+                              )}
+                              {source.claim_reference && (
+                                <div className="mt-2 text-xs text-gray-500">
+                                  <strong>Referenced in:</strong> {source.claim_reference}
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Validation Results */}
+                            {validationStatus && validationStatus !== 'unknown' && (
+                              <div className="mt-3 pt-3 border-t border-gray-300">
+                                {validationIssues.length > 0 && (
+                                  <div className="mb-2">
+                                    <p className="text-xs font-semibold text-red-700 mb-1">⚠️ Issues Found:</p>
+                                    <ul className="list-disc list-inside text-xs text-red-600 space-y-1">
+                                      {validationIssues.map((issue: string, i: number) => (
+                                        <li key={i}>{issue}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                
+                                {exactReferences.length > 0 && (
+                                  <div className="mb-2">
+                                    <p className="text-xs font-semibold text-green-700 mb-1">✓ Exact References Found:</p>
+                                    <ul className="list-disc list-inside text-xs text-green-600 space-y-1">
+                                      {exactReferences.map((ref: string, i: number) => (
+                                        <li key={i} className="italic">"{ref}"</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                
+                                {additionalResources.length > 0 && (
+                                  <div className="mb-2">
+                                    <p className="text-xs font-semibold text-blue-700 mb-1">📚 Additional Resources:</p>
+                                    <ul className="list-disc list-inside text-xs text-blue-600 space-y-1">
+                                      {additionalResources.map((resource: any, i: number) => (
+                                        <li key={i}>
+                                          {resource.title}
+                                          {resource.url && (
+                                            <a href={resource.url} target="_blank" rel="noopener noreferrer" className="ml-1 underline">
+                                              (link)
+                                            </a>
+                                          )}
+                                          <span className="text-gray-500 ml-1">({resource.relevance} relevance: {resource.reason})</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                
+                                {validationNotes && (
+                                  <p className="text-xs text-gray-600 italic mt-2">Note: {validationNotes}</p>
+                                )}
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}

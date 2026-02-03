@@ -105,14 +105,39 @@ async function searchWithSerpAPI(
   const url = `https://serpapi.com/search.json?${params}`
   console.log(`[SERPAPI] Request URL: ${url.replace(apiKey, '***')}`)
 
+  // Check if SSL verification should be bypassed via environment variable
+  const skipSSLVerification = process.env.SKIP_SSL_VERIFICATION === '1' || 
+                              process.env.ALLOW_INSECURE_SSL === '1' ||
+                              process.env.NODE_TLS_REJECT_UNAUTHORIZED === '0'
+
   let response: Response
   try {
-    response = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-      },
-    })
+    if (skipSSLVerification) {
+      // Always use HTTPS fallback (skip SSL verification)
+      console.log('[SERPAPI] Using HTTPS fallback (SKIP_SSL_VERIFICATION enabled)')
+      const httpsAgent = new https.Agent({
+        rejectUnauthorized: false, // Skip SSL verification
+      })
+      
+      try {
+        const data = await fetchWithHttps(url, httpsAgent)
+        console.log(`[SERPAPI] ✅ Fetched via HTTPS fallback. Organic results: ${data.organic_results?.length || 0}`)
+        return parseSerpAPIResults(data, maxResults)
+      } catch (httpsError: any) {
+        console.error('[SERPAPI] HTTPS fallback failed:', httpsError.message)
+        throw new Error(`SerpAPI request failed: ${httpsError.message}`)
+      }
+    } else {
+      // Try standard fetch first
+      response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+        },
+      })
+    }
   } catch (fetchError: any) {
+    // Only process SSL errors if not already using fallback
+    if (!skipSSLVerification) {
     // Log full error structure for debugging
     console.error('[SERPAPI] Fetch error caught:', {
       name: fetchError?.name,
@@ -178,15 +203,19 @@ async function searchWithSerpAPI(
       }
     }
     
-    // Log the error for debugging
-    console.error('[SERPAPI] Fetch failed with non-SSL error:', {
-      message: fetchError?.message,
-      code: fetchError?.code,
-      cause: fetchError?.cause,
-    })
-    
-    // Re-throw if it's not an SSL error
-    throw fetchError
+      // Log the error for debugging
+      console.error('[SERPAPI] Fetch failed with non-SSL error:', {
+        message: fetchError?.message,
+        code: fetchError?.code,
+        cause: fetchError?.cause,
+      })
+      
+      // Re-throw if it's not an SSL error
+      throw fetchError
+    } else {
+      // If skipSSLVerification is enabled but we still got an error, re-throw it
+      throw fetchError
+    }
   }
 
   console.log(`[SERPAPI] Response status: ${response.status} ${response.statusText}`)
