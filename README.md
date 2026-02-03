@@ -65,12 +65,42 @@ BING_SEARCH_API_KEY=your_bing_key
 
 ### Testing Web Search
 
+**Option 1: Test Search Endpoint**
 To verify your SerpAPI key is working, visit:
 ```
 http://localhost:3000/api/test-search?query=GDPR+fines+2024
 ```
 
 This will test the web search and show you if it's working correctly.
+
+**Option 2: Feature Validation Test**
+Run the automated feature test script:
+```bash
+node scripts/test-features.js
+```
+
+This will test all web search features:
+- ✅ Automatic source enrichment
+- ✅ URL validation and metadata enrichment
+- ✅ Smart query generation
+- ✅ Rate limiting (500ms delays, max 5 findings)
+- ✅ Error handling (continues on failures)
+- ✅ Integration with validation pipeline
+
+**Option 3: Manual Testing**
+1. Navigate to the Validate Draft page
+2. Paste a draft with unsourced claims (e.g., "The market grew 45% in 2023")
+3. Submit for validation
+4. Check the "Sources & References" section in the results
+5. Verify that web search results appear for unsourced claims
+
+**Checking Server Logs**
+Watch the development server console for detailed `[WEB SEARCH]` logs showing:
+- Search queries being generated
+- Results found per query
+- Rate limiting delays (500ms)
+- URL validation progress
+- Error handling and recovery
 
 ### Running the Application
 

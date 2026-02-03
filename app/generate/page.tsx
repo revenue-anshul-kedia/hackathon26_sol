@@ -14,6 +14,7 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [webSources, setWebSources] = useState<any[]>([])
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -40,9 +41,18 @@ export default function GeneratePage() {
 
       const data = await response.json()
       setDraft(data.draft)
+      setWebSources(data.webSources || [])
       
       if (data.warning) {
         setError(data.warning)
+      }
+      
+      // Log web search usage if available
+      if (data.webSearchUsed) {
+        console.log(`Web search used: ${data.webSearchResultsCount} results found`)
+        if (data.webSources) {
+          console.log('Web sources:', data.webSources)
+        }
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred')
@@ -161,7 +171,14 @@ export default function GeneratePage() {
         {draft && (
           <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold text-gray-800">Generated Draft</h2>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">Generated Draft</h2>
+                {error && error.includes('web search') && (
+                  <p className="text-sm text-gray-600 mt-1">
+                    ℹ️ Draft generated using web search results for enhanced accuracy
+                  </p>
+                )}
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleCopyDraft}
@@ -180,6 +197,50 @@ export default function GeneratePage() {
             <div className="p-4 bg-gray-50 border border-gray-300 rounded-lg">
               <pre className="whitespace-pre-wrap text-sm text-gray-800">{draft}</pre>
             </div>
+            
+            {webSources.length > 0 && (
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-lg font-semibold text-blue-900 mb-3">
+                  📚 Sources Used ({webSources.length})
+                </h3>
+                <div className="space-y-3">
+                  {webSources.map((source, idx) => (
+                    <div key={idx} className="p-3 bg-white rounded border border-blue-100">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800 mb-1">
+                            {source.title || `Source ${idx + 1}`}
+                          </h4>
+                          {source.url && (
+                            <a
+                              href={source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline text-sm break-all"
+                            >
+                              {source.url}
+                            </a>
+                          )}
+                          {source.snippet && (
+                            <p className="text-gray-600 text-sm mt-2 italic">
+                              "{source.snippet.substring(0, 150)}..."
+                            </p>
+                          )}
+                          {source.date && (
+                            <p className="text-gray-500 text-xs mt-1">
+                              Date: {source.date}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-blue-700 mt-3">
+                  ℹ️ These sources were used to inform the generated draft. URLs should be included in [SOURCE: ...] citations within the draft.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -113,13 +113,45 @@ async function searchWithSerpAPI(
       },
     })
   } catch (fetchError: any) {
-    // Check if it's an SSL certificate error
-    if (
-      fetchError?.message?.includes('certificate') ||
-      fetchError?.message?.includes('UNABLE_TO_GET_ISSUER_CERT') ||
-      fetchError?.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY'
-    ) {
+    // Log full error structure for debugging
+    console.error('[SERPAPI] Fetch error caught:', {
+      name: fetchError?.name,
+      message: fetchError?.message,
+      code: fetchError?.code,
+      cause: fetchError?.cause ? {
+        name: fetchError.cause?.name,
+        message: fetchError.cause?.message,
+        code: fetchError.cause?.code,
+      } : undefined,
+    })
+    
+    // Check if it's an SSL certificate error - check multiple ways
+    // In Node.js, SSL errors are often in the cause property
+    const errorCode = fetchError?.code || fetchError?.cause?.code
+    const errorMessage = (fetchError?.message || fetchError?.cause?.message || '').toLowerCase()
+    const causeMessage = (fetchError?.cause?.message || '').toLowerCase()
+    
+    // Check for SSL errors - handle both direct errors and errors with cause
+    const isSSLError = 
+      errorCode === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY' ||
+      errorCode === 'CERT_HAS_EXPIRED' ||
+      errorCode === 'SELF_SIGNED_CERT_IN_CHAIN' ||
+      errorMessage.includes('certificate') ||
+      errorMessage.includes('unable to get local issuer') ||
+      (errorMessage.includes('fetch failed') && (causeMessage.includes('certificate') || fetchError?.cause?.code === 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY')) ||
+      causeMessage.includes('certificate') ||
+      causeMessage.includes('unable to get local issuer')
+    
+    console.log(`[SERPAPI] SSL error detection: ${isSSLError} (code: ${errorCode}, message: ${errorMessage.substring(0, 100)})`)
+    
+    if (isSSLError) {
       console.warn('[SERPAPI] SSL certificate error detected. Attempting with custom HTTPS agent...')
+      console.warn('[SERPAPI] Error details:', {
+        message: fetchError?.message,
+        code: fetchError?.code,
+        causeCode: fetchError?.cause?.code,
+        causeMessage: fetchError?.cause?.message,
+      })
       console.warn('[SERPAPI] WARNING: Using less secure SSL settings for demo purposes only')
       
       // Try with a custom HTTPS agent that allows self-signed/invalid certificates
@@ -131,14 +163,28 @@ async function searchWithSerpAPI(
 
       // Use https module directly as fallback
       try {
+        console.log('[SERPAPI] Attempting HTTPS fallback with custom agent...')
         const data = await fetchWithHttps(url, httpsAgent)
-        console.log(`[SERPAPI] Response received via HTTPS fallback. Organic results: ${data.organic_results?.length || 0}`)
+        console.log(`[SERPAPI] ✅ HTTPS fallback succeeded! Organic results: ${data.organic_results?.length || 0}`)
         return parseSerpAPIResults(data, maxResults)
       } catch (httpsError: any) {
-        console.error('[SERPAPI] HTTPS fallback also failed:', httpsError.message)
+        console.error('[SERPAPI] ❌ HTTPS fallback also failed:', httpsError.message)
+        console.error('[SERPAPI] Fallback error details:', {
+          message: httpsError?.message,
+          code: httpsError?.code,
+          stack: httpsError?.stack,
+        })
         throw new Error(`SerpAPI SSL error: Unable to verify certificate. ${httpsError.message}`)
       }
     }
+    
+    // Log the error for debugging
+    console.error('[SERPAPI] Fetch failed with non-SSL error:', {
+      message: fetchError?.message,
+      code: fetchError?.code,
+      cause: fetchError?.cause,
+    })
+    
     // Re-throw if it's not an SSL error
     throw fetchError
   }
@@ -147,12 +193,28 @@ async function searchWithSerpAPI(
 
   if (!response.ok) {
     const errorText = await response.text()
-    console.error(`[SERPAPI] Error response: ${errorText}`)
+    console.error(`[SERPAPI] Error response (${response.status}): ${errorText}`)
+    // Try to parse as JSON to get more details
+    try {
+      const errorJson = JSON.parse(errorText)
+      if (errorJson.error) {
+        console.error(`[SERPAPI] API Error: ${errorJson.error}`)
+        throw new Error(`SerpAPI error: ${errorJson.error}`)
+      }
+    } catch {
+      // Not JSON, use text as-is
+    }
     throw new Error(`SerpAPI error: ${response.statusText} - ${errorText}`)
   }
 
   const data = await response.json()
   console.log(`[SERPAPI] Response received. Organic results: ${data.organic_results?.length || 0}`)
+  
+  // Check for API errors in response
+  if (data.error) {
+    console.error(`[SERPAPI] API returned error: ${data.error}`)
+    throw new Error(`SerpAPI API error: ${data.error}`)
+  }
 
   return parseSerpAPIResults(data, maxResults)
 }

@@ -383,20 +383,26 @@ async function enrichSourcesWithWebSearch(
     return enrichedSources
   }
   
-  console.log(`[WEB SEARCH] Starting enrichment for ${unsourcedFindings.length} findings`)
+  console.log(`[WEB SEARCH] ===== STARTING SOURCE ENRICHMENT =====`)
+  console.log(`[WEB SEARCH] Total unsourced findings: ${unsourcedFindings.length}`)
+  console.log(`[WEB SEARCH] Processing top 5 findings (rate limit protection)`)
+  console.log(`[WEB SEARCH] Case type: ${caseType}, Geography: ${geography}, Industry: ${industry}`)
   
   // For each unsourced finding, try to find relevant sources
-  for (const finding of unsourcedFindings.slice(0, 5)) { // Limit to 5 to avoid rate limits
+  for (let i = 0; i < Math.min(unsourcedFindings.length, 5); i++) { // Limit to 5 to avoid rate limits
+    const finding = unsourcedFindings[i]
     try {
       const claim = finding.claim_excerpt || finding.rationale || ''
       if (!claim || claim.length < 20) {
-        console.log(`[WEB SEARCH] Skipping finding - claim too short: "${claim.substring(0, 50)}"`)
+        console.log(`[WEB SEARCH] [${i+1}/5] Skipping finding - claim too short: "${claim.substring(0, 50)}"`)
         continue
       }
       
-      // Generate search query from claim
-      const searchQuery = `${claim.substring(0, 100)} ${industry} ${geography} 2024`
-      console.log(`[WEB SEARCH] Searching for: "${searchQuery}"`)
+      // Smart query generation: Extract key terms and create contextual query
+      const keyTerms = extractKeyTermsFromClaim(claim, industry, geography)
+      const searchQuery = `${keyTerms} ${industry} ${geography} 2024`
+      console.log(`[WEB SEARCH] [${i+1}/5] Processing finding: "${claim.substring(0, 80)}..."`)
+      console.log(`[WEB SEARCH] [${i+1}/5] Generated search query: "${searchQuery}"`)
       
       // Search the web
       const searchResults = await searchWeb({
@@ -427,34 +433,76 @@ async function enrichSourcesWithWebSearch(
         }
       }
       
-      // Small delay to avoid rate limits
+      // Rate limiting: 500ms delay between searches
+      console.log(`[WEB SEARCH] [${i+1}/5] Waiting 500ms before next search (rate limiting)`)
       await new Promise(resolve => setTimeout(resolve, 500))
+      console.log(`[WEB SEARCH] [${i+1}/5] Completed successfully`)
     } catch (error) {
-      console.error(`[WEB SEARCH] Error searching for claim "${finding.claim_excerpt}":`, error)
+      console.error(`[WEB SEARCH] [${i+1}/5] ERROR searching for claim "${finding.claim_excerpt?.substring(0, 50)}":`, error)
       if (error instanceof Error) {
-        console.error(`[WEB SEARCH] Error message: ${error.message}`)
-        console.error(`[WEB SEARCH] Error stack: ${error.stack}`)
+        console.error(`[WEB SEARCH] [${i+1}/5] Error message: ${error.message}`)
+        console.error(`[WEB SEARCH] [${i+1}/5] Error stack: ${error.stack}`)
       }
+      // Continue processing other findings even if one fails (error handling)
+      console.log(`[WEB SEARCH] [${i+1}/5] Continuing to next finding despite error`)
     }
   }
   
-  console.log(`[WEB SEARCH] Enrichment complete. Total sources: ${enrichedSources.length}`)
+  console.log(`[WEB SEARCH] ===== SOURCE ENRICHMENT COMPLETE =====`)
+  console.log(`[WEB SEARCH] Total sources after enrichment: ${enrichedSources.length}`)
+  console.log(`[WEB SEARCH] Starting URL validation for ${enrichedSources.filter(s => s.url).length} URLs`)
   
   // Validate and enrich existing URLs
-  for (const source of enrichedSources) {
+  let validatedCount = 0
+  for (let i = 0; i < enrichedSources.length; i++) {
+    const source = enrichedSources[i]
     if (source.url && !source.title) {
       try {
+        console.log(`[WEB SEARCH] [URL VALIDATION ${i+1}/${enrichedSources.length}] Validating: ${source.url}`)
         const validation = await validateAndEnrichURL(source.url)
         if (validation.valid && validation.title) {
           source.title = validation.title
+          validatedCount++
+          console.log(`[WEB SEARCH] [URL VALIDATION ${i+1}/${enrichedSources.length}] ✓ Enriched with title: "${validation.title}"`)
+        } else if (validation.valid) {
+          validatedCount++
+          console.log(`[WEB SEARCH] [URL VALIDATION ${i+1}/${enrichedSources.length}] ✓ Valid but no title available`)
+        } else {
+          console.log(`[WEB SEARCH] [URL VALIDATION ${i+1}/${enrichedSources.length}] ✗ Invalid: ${validation.error}`)
         }
       } catch (error) {
-        console.error(`Error validating URL ${source.url}:`, error)
+        console.error(`[WEB SEARCH] [URL VALIDATION ${i+1}/${enrichedSources.length}] Error validating URL ${source.url}:`, error)
+        // Continue validation for other URLs (error handling)
       }
     }
   }
   
+  console.log(`[WEB SEARCH] ===== URL VALIDATION COMPLETE =====`)
+  console.log(`[WEB SEARCH] Validated ${validatedCount} URLs`)
+  console.log(`[WEB SEARCH] Final source count: ${enrichedSources.length}`)
+  
   return enrichedSources
+}
+
+// Extract key terms from a claim for better search query generation
+function extractKeyTermsFromClaim(claim: string, industry: string, geography: string): string {
+  // Remove common stop words
+  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'this', 'that', 'these', 'those', 'has', 'have', 'had', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can'])
+  
+  // Extract meaningful words (length > 3, not stop words, not industry/geography)
+  const words = claim
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => 
+      word.length > 3 && 
+      !stopWords.has(word) &&
+      !word.includes(industry.toLowerCase()) &&
+      !word.includes(geography.toLowerCase())
+    )
+    .slice(0, 5) // Top 5 keywords
+  
+  return words.join(' ') || claim.substring(0, 100)
 }
 
 // Initialize Azure OpenAI client

@@ -23,19 +23,32 @@ export async function GET(request: NextRequest) {
       }, { status: 400 })
     }
     
+    console.log(`[TEST SEARCH] Starting web search...`)
+    const startTime = Date.now()
+    
     const results = await searchWeb({
       query,
       geography: 'US',
       maxResults: 3,
     })
     
+    const duration = Date.now() - startTime
+    console.log(`[TEST SEARCH] Search completed in ${duration}ms, found ${results.length} results`)
+    
     return NextResponse.json({
       success: true,
       query,
       resultsCount: results.length,
       results,
-      apiKeyConfigured: true,
+      apiKeyConfigured: !!process.env.SERP_API_KEY,
       apiKeyLength: process.env.SERP_API_KEY?.length || 0,
+      apiKeyPrefix: process.env.SERP_API_KEY ? process.env.SERP_API_KEY.substring(0, 10) + '...' : 'N/A',
+      duration: `${duration}ms`,
+      diagnostics: {
+        serpApiConfigured: !!process.env.SERP_API_KEY,
+        googleConfigured: !!(process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_ENGINE_ID),
+        bingConfigured: !!process.env.BING_SEARCH_API_KEY,
+      }
     })
   } catch (error: any) {
     console.error('[TEST SEARCH] Error:', error)
