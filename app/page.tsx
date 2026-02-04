@@ -103,8 +103,8 @@ export default function Home() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
               </div>
-              <h4 className="font-semibold text-gray-900 mb-1">AI-Powered Analysis</h4>
-              <p className="text-sm text-gray-600">Advanced AI relevancy and bias detection</p>
+              <h4 className="font-semibold text-gray-900 mb-1">Agentic AI based Analysis</h4>
+              <p className="text-sm text-gray-600">AI Agents screening for relevancy and bias detection</p>
             </div>
             <div className="text-center">
               <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
