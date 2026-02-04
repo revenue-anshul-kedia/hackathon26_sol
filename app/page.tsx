@@ -9,7 +9,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Sentinels</h1>
-              <p className="text-sm text-gray-500 mt-1">Enterprise-grade validation for case deliverables</p>
+              <p className="text-sm text-gray-500 mt-1">Enterprise-grade proof reading for case deliverables</p>
             </div>
           </div>
         </div>
@@ -20,7 +20,7 @@ export default function Home() {
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold text-gray-900 mb-4">Bain Output Readiness Classifier</h2>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Validate AI-generated case deliverables for readiness, compliance, and quality standards
+            Proof-read AI-generated case deliverables for readiness, compliance, and quality standards
           </p>
         </div>
 
@@ -39,10 +39,10 @@ export default function Home() {
               </div>
               <div className="flex-1">
                 <h3 className="text-xl font-semibold text-gray-900 mb-2 group-hover:text-bain-blue transition-colors">
-                  Validate Draft
+                  Proof-Read Draft
                 </h3>
                 <p className="text-gray-600 mb-4">
-                  Upload or paste your draft content for comprehensive validation, compliance checking, and quality assessment.
+                  Upload or paste your draft content for multi-lens comprehensive proofing and assessment.
                 </p>
                 <div className="flex items-center text-sm font-medium text-bain-blue">
                   Get started
@@ -104,7 +104,7 @@ export default function Home() {
                 </svg>
               </div>
               <h4 className="font-semibold text-gray-900 mb-1">AI-Powered Analysis</h4>
-              <p className="text-sm text-gray-600">Advanced AI validation and bias detection</p>
+              <p className="text-sm text-gray-600">Advanced AI relevancy and bias detection</p>
             </div>
             <div className="text-center">
               <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
@@ -113,7 +113,7 @@ export default function Home() {
                 </svg>
               </div>
               <h4 className="font-semibold text-gray-900 mb-1">Source Verification</h4>
-              <p className="text-sm text-gray-600">Automatic source validation and citation checking</p>
+              <p className="text-sm text-gray-600">Automatic source proofing and citation checking</p>
             </div>
           </div>
         </div>
