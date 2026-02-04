@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Bain Output Readiness Classifier',
+  title: 'Sentinels',
   description: 'Validate AI-generated case deliverables for readiness',
 }
 

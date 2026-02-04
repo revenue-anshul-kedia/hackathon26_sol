@@ -165,20 +165,36 @@ export default function ValidatePage() {
   }) || []
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <Link href="/" className="text-bain-blue hover:underline">
-            ← Back to Home
-          </Link>
+    <main className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Link href="/" className="text-gray-500 hover:text-gray-700 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </Link>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Validate Draft</h1>
+                <p className="text-sm text-gray-500">Quality assurance and compliance validation</p>
+              </div>
+            </div>
+          </div>
         </div>
+      </header>
 
-        <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 mb-6">
-          <h1 className="text-3xl font-bold text-bain-blue mb-6">Validate Draft</h1>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="enterprise-card mb-6">
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Draft Content</h2>
+            <p className="text-sm text-gray-500">Upload a file or paste your draft text for validation</p>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Input Mode Toggle */}
-            <div className="flex gap-4 mb-4">
+            <div className="flex gap-2 mb-6 p-1 bg-gray-100 rounded-lg inline-flex">
               <button
                 type="button"
                 onClick={() => {
@@ -186,13 +202,13 @@ export default function ValidatePage() {
                   setUploadedFileName(null)
                   setText('')
                 }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-4 py-2 rounded-md font-medium text-sm transition-all ${
                   inputMode === 'text'
-                    ? 'bg-bain-blue text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    ? 'bg-white text-bain-blue shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                📝 Paste Text
+                <span className="mr-2">📝</span>Paste Text
               </button>
               <button
                 type="button"
@@ -200,40 +216,47 @@ export default function ValidatePage() {
                   setInputMode('file')
                   setText('')
                 }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-4 py-2 rounded-md font-medium text-sm transition-all ${
                   inputMode === 'file'
-                    ? 'bg-bain-blue text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    ? 'bg-white text-bain-blue shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                📄 Upload File
+                <span className="mr-2">📄</span>Upload File
               </button>
             </div>
 
             {/* Always show textarea */}
-            <div>
+            <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Draft Text *
+                Draft Text <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 required={inputMode === 'text'}
                 rows={12}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bain-blue focus:border-transparent"
+                className="enterprise-input font-mono text-sm"
                 placeholder={inputMode === 'file' ? 'Upload a file to extract text here...' : 'Paste your draft text here or upload a file...'}
                 suppressHydrationWarning
                 disabled={loading && inputMode === 'file'}
               />
               {loading && inputMode === 'file' && (
-                <p className="mt-2 text-sm text-blue-600">
-                  ⏳ Extracting text from file... (Click Validate button after extraction)
-                </p>
+                <div className="mt-2 flex items-center text-sm text-blue-600">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Extracting text from file... (Click Validate button after extraction)
+                </div>
               )}
               {uploadedFileName && !loading && inputMode === 'text' && (
-                <p className="mt-2 text-sm text-green-600">
-                  ✅ Text extracted from {uploadedFileName}. Review and click Validate when ready.
-                </p>
+                <div className="mt-2 flex items-center text-sm text-green-600">
+                  <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  Text extracted from {uploadedFileName}. Review and click Validate when ready.
+                </div>
               )}
             </div>
 
@@ -347,8 +370,17 @@ export default function ValidatePage() {
           </form>
 
           {error && (
-            <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-              {error}
+            <div className="mt-4 p-4 bg-red-50 border-l-4 border-red-400 rounded-r-lg">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-red-700 font-medium">{error}</p>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -356,10 +388,10 @@ export default function ValidatePage() {
         {result && (
           <div className="space-y-6">
             {/* Summary Card */}
-            <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
+            <div className="enterprise-card">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Validation Results</h2>
+                  <h2 className="text-xl font-semibold text-gray-900 mb-2">Validation Results</h2>
                   <div className="flex items-center gap-4 flex-wrap">
                     <span className={`px-4 py-2 rounded-full text-white font-bold ${getLabelColor(result.label)}`}>
                       {result.label}
@@ -394,13 +426,13 @@ export default function ValidatePage() {
                 <div className="mt-4 md:mt-0 flex gap-2">
                   <button
                     onClick={handleExportJSON}
-                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                    className="enterprise-button-secondary"
                   >
                     Export JSON
                   </button>
                   <button
                     onClick={handleCopyRewritten}
-                    className="px-4 py-2 bg-bain-green text-white rounded-lg hover:bg-green-700"
+                    className="enterprise-button-primary bg-bain-green hover:bg-green-700 focus:ring-bain-green"
                   >
                     Copy Rewritten Text
                   </button>
@@ -455,16 +487,19 @@ export default function ValidatePage() {
             </div>
 
             {/* Findings Table */}
-            <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">Findings</h2>
+            <div className="enterprise-card">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Findings</h2>
+                <p className="text-sm text-gray-500">{filteredFindings.length} of {result.findings.length} findings displayed</p>
+              </div>
               
-              <div className="mb-4 flex flex-wrap gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Category</label>
+              <div className="mb-6 flex flex-wrap gap-4">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Category</label>
                   <select
                     value={filterCategory}
                     onChange={(e) => setFilterCategory(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg"
+                    className="enterprise-select"
                   >
                     <option value="all">All Categories</option>
                     <option value="Freshness">Freshness</option>
@@ -474,12 +509,12 @@ export default function ValidatePage() {
                     <option value="Bias">Bias</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Severity</label>
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Severity</label>
                   <select
                     value={filterSeverity}
                     onChange={(e) => setFilterSeverity(e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-lg"
+                    className="enterprise-select"
                   >
                     <option value="all">All Severities</option>
                     <option value="high">High</option>
@@ -490,35 +525,48 @@ export default function ValidatePage() {
               </div>
 
               {filteredFindings.length === 0 ? (
-                <p className="text-gray-600">No findings match the selected filters.</p>
+                <div className="text-center py-12">
+                  <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p className="mt-4 text-gray-600">No findings match the selected filters.</p>
+                </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-4 py-2 text-left">ID</th>
-                        <th className="border border-gray-300 px-4 py-2 text-left">Category</th>
-                        <th className="border border-gray-300 px-4 py-2 text-left">Severity</th>
-                        <th className="border border-gray-300 px-4 py-2 text-left">Claim Excerpt</th>
-                        <th className="border border-gray-300 px-4 py-2 text-left">Rationale</th>
-                        <th className="border border-gray-300 px-4 py-2 text-left">Suggested Fix</th>
-                        <th className="border border-gray-300 px-4 py-2 text-left">Owner</th>
+                  <table className="enterprise-table w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="enterprise-table-header w-20">ID</th>
+                        <th className="enterprise-table-header w-32">Category</th>
+                        <th className="enterprise-table-header w-28">Severity</th>
+                        <th className="enterprise-table-header min-w-[200px]">Claim Excerpt</th>
+                        <th className="enterprise-table-header min-w-[250px]">Rationale</th>
+                        <th className="enterprise-table-header min-w-[200px]">Suggested Fix</th>
+                        <th className="enterprise-table-header w-32">Owner</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="bg-white divide-y divide-gray-200">
                       {filteredFindings.map((finding, index) => (
-                        <tr key={`${finding.id}-${index}`} className="hover:bg-gray-50">
-                          <td className="border border-gray-300 px-4 py-2 font-mono text-sm">{finding.id}</td>
-                          <td className="border border-gray-300 px-4 py-2">{finding.category}</td>
-                          <td className="border border-gray-300 px-4 py-2">
-                            <span className={`px-2 py-1 rounded text-xs font-semibold border ${getSeverityColor(finding.severity)}`}>
+                        <tr key={`${finding.id}-${index}`} className="hover:bg-gray-50 transition-colors">
+                          <td className="enterprise-table-cell font-mono text-xs align-top">{finding.id}</td>
+                          <td className="enterprise-table-cell align-top">
+                            <span className="enterprise-badge bg-blue-100 text-blue-800 whitespace-nowrap">{finding.category}</span>
+                          </td>
+                          <td className="enterprise-table-cell align-top">
+                            <span className={`enterprise-badge border whitespace-nowrap ${getSeverityColor(finding.severity)}`}>
                               {finding.severity}
                             </span>
                           </td>
-                          <td className="border border-gray-300 px-4 py-2 text-sm max-w-xs">{finding.claim_excerpt}</td>
-                          <td className="border border-gray-300 px-4 py-2 text-sm">{finding.rationale}</td>
-                          <td className="border border-gray-300 px-4 py-2 text-sm">{finding.suggested_fix}</td>
-                          <td className="border border-gray-300 px-4 py-2 text-sm">{finding.recommended_owner}</td>
+                          <td className="enterprise-table-cell-wrap align-top max-w-md">
+                            <div className="break-words">{finding.claim_excerpt}</div>
+                          </td>
+                          <td className="enterprise-table-cell-wrap align-top max-w-md">
+                            <div className="break-words">{finding.rationale}</div>
+                          </td>
+                          <td className="enterprise-table-cell-wrap align-top max-w-md">
+                            <div className="break-words">{finding.suggested_fix}</div>
+                          </td>
+                          <td className="enterprise-table-cell align-top text-gray-600">{finding.recommended_owner}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -73,33 +73,49 @@ export default function GeneratePage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <Link href="/" className="text-bain-blue hover:underline">
-            ← Back to Home
-          </Link>
+    <main className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Link href="/" className="text-gray-500 hover:text-gray-700 transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+              </Link>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Generate Draft</h1>
+                <p className="text-sm text-gray-500">AI-powered draft generation with source citations</p>
+              </div>
+            </div>
+          </div>
         </div>
+      </header>
 
-        <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 mb-6">
-          <h1 className="text-3xl font-bold text-bain-blue mb-6">Generate Draft</h1>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="enterprise-card mb-6">
+          <div className="mb-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Draft Generation</h2>
+            <p className="text-sm text-gray-500">Generate AI-powered draft content with integrated web research</p>
+          </div>
 
           <form onSubmit={handleGenerate} className="space-y-6">
-            <div>
+            <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Prompt *
+                Prompt <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 required
                 rows={6}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bain-blue focus:border-transparent"
+                className="enterprise-input"
                 placeholder="Describe what you want the draft to cover... (e.g., 'Analyze the competitive landscape for cloud services in the US market')"
               />
             </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-2 gap-6 mb-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Case Type
@@ -107,7 +123,7 @@ export default function GeneratePage() {
                 <select
                   value={caseType}
                   onChange={(e) => setCaseType(e.target.value as CaseType)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bain-blue"
+                  className="enterprise-select"
                 >
                   <option value="Diligence">Diligence</option>
                   <option value="Strategy">Strategy</option>
@@ -123,7 +139,7 @@ export default function GeneratePage() {
                 <select
                   value={geography}
                   onChange={(e) => setGeography(e.target.value as Geography)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bain-blue"
+                  className="enterprise-select"
                 >
                   <option value="United States">United States</option>
                   <option value="EU">EU</option>
@@ -142,60 +158,81 @@ export default function GeneratePage() {
                   type="text"
                   value={industry}
                   onChange={(e) => setIndustry(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bain-blue"
+                  className="enterprise-input"
                   placeholder="e.g., Technology, Healthcare, Financial Services"
                 />
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full md:w-auto px-8 py-3 bg-bain-green text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-            >
-              {loading ? 'Generating...' : 'Generate Draft'}
-            </button>
+            <div className="flex items-center justify-end pt-4 border-t border-gray-200">
+              <button
+                type="submit"
+                disabled={loading}
+                className="enterprise-button-primary bg-bain-green hover:bg-green-700 focus:ring-bain-green"
+              >
+                {loading ? (
+                  <span className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating...
+                  </span>
+                ) : (
+                  'Generate Draft'
+                )}
+              </button>
+            </div>
           </form>
 
           {error && (
-            <div className={`mt-4 p-4 border rounded-lg ${
+            <div className={`mt-4 p-4 border-l-4 rounded-r-lg ${
               error.includes('not configured') 
-                ? 'bg-yellow-100 border-yellow-400 text-yellow-700' 
-                : 'bg-red-100 border-red-400 text-red-700'
+                ? 'bg-yellow-50 border-yellow-400' 
+                : 'bg-red-50 border-red-400'
             }`}>
-              {error}
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className={`h-5 w-5 ${error.includes('not configured') ? 'text-yellow-400' : 'text-red-400'}`} viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className={`text-sm font-medium ${error.includes('not configured') ? 'text-yellow-700' : 'text-red-700'}`}>{error}</p>
+                </div>
+              </div>
             </div>
           )}
         </div>
 
         {draft && (
-          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
+          <div className="enterprise-card">
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h2 className="text-2xl font-bold text-gray-800">Generated Draft</h2>
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Generated Draft</h2>
                 {error && error.includes('web search') && (
-                  <p className="text-sm text-gray-600 mt-1">
-                    ℹ️ Draft generated using web search results for enhanced accuracy
+                  <p className="text-sm text-gray-500">
+                    Draft generated using web search results for enhanced accuracy
                   </p>
                 )}
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleCopyDraft}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                  className="enterprise-button-secondary"
                 >
                   Copy Draft
                 </button>
                 <button
                   onClick={handleUseInValidation}
-                  className="px-4 py-2 bg-bain-blue text-white rounded-lg hover:bg-blue-800"
+                  className="enterprise-button-primary"
                 >
                   Validate This Draft
                 </button>
               </div>
             </div>
-            <div className="p-4 bg-gray-50 border border-gray-300 rounded-lg">
-              <pre className="whitespace-pre-wrap text-sm text-gray-800">{draft}</pre>
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <pre className="whitespace-pre-wrap text-sm text-gray-900 font-mono leading-relaxed">{draft}</pre>
             </div>
             
             {webSources.length > 0 && (
