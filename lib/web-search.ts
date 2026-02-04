@@ -82,7 +82,17 @@ async function searchWithSerpAPI(
   geography?: string,
   maxResults: number = 5
 ): Promise<WebSearchResult[]> {
-  const location = geography || 'United States'
+  // Map geography to location string for SerpAPI
+  const locationMap: Record<string, string> = {
+    'United States': 'United States',
+    'US': 'United States', // Backward compatibility
+    'EU': 'United Kingdom', // Default for EU
+    'UK': 'United Kingdom',
+    'India': 'India',
+    'China': 'China',
+    'Global': 'United States',
+  }
+  const location = locationMap[geography || 'United States'] || 'United States'
   const apiKey = process.env.SERP_API_KEY!
 
   if (!apiKey) {
@@ -120,11 +130,46 @@ async function searchWithSerpAPI(
       })
       
       try {
-        const data = await fetchWithHttps(url, httpsAgent)
-        console.log(`[SERPAPI] ✅ Fetched via HTTPS fallback. Organic results: ${data.organic_results?.length || 0}`)
-        return parseSerpAPIResults(data, maxResults)
+        const responseData = await fetchWithHttps(url, httpsAgent)
+        
+        // Check if response contains an error
+        if (responseData.error) {
+          console.error(`[SERPAPI] API returned error: ${responseData.error}`)
+          throw new Error(`SerpAPI API error: ${responseData.error}`)
+        }
+        
+        // Check for HTTP error status in response (if fetchWithHttps includes status)
+        if (responseData.status && responseData.status >= 400) {
+          const errorMessage = responseData.error || responseData.message || `HTTP ${responseData.status}: ${responseData.statusText || 'Bad Request'}`
+          console.error(`[SERPAPI] HTTP error (${responseData.status}): ${errorMessage}`)
+          throw new Error(`SerpAPI error: ${errorMessage}`)
+        }
+        
+        console.log(`[SERPAPI] ✅ Fetched via HTTPS fallback. Organic results: ${responseData.organic_results?.length || 0}`)
+        return parseSerpAPIResults(responseData, maxResults)
       } catch (httpsError: any) {
         console.error('[SERPAPI] HTTPS fallback failed:', httpsError.message)
+        
+        // Provide more helpful error messages based on status code
+        if (httpsError.message.includes('HTTP 400') || httpsError.message.includes('Bad Request')) {
+          // Extract the actual error message from SerpAPI if available
+          const serpErrorMatch = httpsError.message.match(/HTTP 400: (.+)/)
+          const serpErrorMessage = serpErrorMatch ? serpErrorMatch[1] : 'Bad Request'
+          
+          let helpfulMessage = `SerpAPI request failed: ${serpErrorMessage}`
+          
+          // Add troubleshooting hints
+          if (serpErrorMessage.toLowerCase().includes('invalid') || serpErrorMessage.toLowerCase().includes('api')) {
+            helpfulMessage += '. Please check your SERP_API_KEY is valid and your account has available credits.'
+          } else if (serpErrorMessage.toLowerCase().includes('query') || serpErrorMessage.toLowerCase().includes('parameter')) {
+            helpfulMessage += '. The search query may be invalid or contain unsupported characters.'
+          } else {
+            helpfulMessage += '. This may indicate an invalid API key, invalid query parameters, or account issues.'
+          }
+          
+          throw new Error(helpfulMessage)
+        }
+        
         throw new Error(`SerpAPI request failed: ${httpsError.message}`)
       }
     } else {
@@ -313,7 +358,22 @@ function fetchWithHttps(urlString: string, agent: https.Agent): Promise<any> {
             reject(new Error(`Failed to parse response: ${parseError}`))
           }
         } else {
-          reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`))
+          // Try to parse error response to get detailed error message
+          let errorMessage = `HTTP ${res.statusCode}: ${res.statusMessage || 'Bad Request'}`
+          try {
+            const errorData = JSON.parse(data)
+            if (errorData.error) {
+              errorMessage = `HTTP ${res.statusCode}: ${errorData.error}`
+            } else if (errorData.message) {
+              errorMessage = `HTTP ${res.statusCode}: ${errorData.message}`
+            }
+          } catch {
+            // If parsing fails, use the raw data if available
+            if (data && data.trim()) {
+              errorMessage = `HTTP ${res.statusCode}: ${data.substring(0, 200)}`
+            }
+          }
+          reject(new Error(errorMessage))
         }
       })
     })
@@ -524,14 +584,15 @@ function extractKeywords(claim: string): string[] {
  */
 function getCountryCode(geography?: string): string {
   const codes: Record<string, string> = {
-    'US': 'us',
+    'United States': 'us',
+    'US': 'us', // Backward compatibility
     'EU': 'de', // Default to Germany for EU
     'UK': 'gb',
     'India': 'in',
     'China': 'cn',
     'Global': 'us',
   }
-  return codes[geography || 'US'] || 'us'
+  return codes[geography || 'United States'] || 'us'
 }
 
 /**
@@ -539,13 +600,14 @@ function getCountryCode(geography?: string): string {
  */
 function getBingMarket(geography?: string): string {
   const markets: Record<string, string> = {
-    'US': 'en-US',
+    'United States': 'en-US',
+    'US': 'en-US', // Backward compatibility
     'EU': 'en-GB',
     'UK': 'en-GB',
     'India': 'en-IN',
     'China': 'en-CN',
     'Global': 'en-US',
   }
-  return markets[geography || 'US'] || 'en-US'
+  return markets[geography || 'United States'] || 'en-US'
 }
 

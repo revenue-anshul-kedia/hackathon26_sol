@@ -5,13 +5,13 @@ import Link from 'next/link'
 import { ValidationResult } from '@/lib/validation'
 
 type CaseType = 'Diligence' | 'Strategy' | 'Performance Transformation' | 'Org Design'
-type Geography = 'US' | 'EU' | 'UK' | 'India' | 'China' | 'Global'
+type Geography = 'United States' | 'EU' | 'UK' | 'India' | 'China' | 'Global'
 type StakesLevel = 'Internal draft' | 'Client discussion' | 'Board-level'
 
 export default function ValidatePage() {
   const [text, setText] = useState('')
   const [caseType, setCaseType] = useState<CaseType>('Diligence')
-  const [geography, setGeography] = useState<Geography>('US')
+  const [geography, setGeography] = useState<Geography>('United States')
   const [industry, setIndustry] = useState('')
   const [stakesLevel, setStakesLevel] = useState<StakesLevel>('Client discussion')
   const [loading, setLoading] = useState(false)
@@ -19,6 +19,8 @@ export default function ValidatePage() {
   const [error, setError] = useState<string | null>(null)
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const [filterSeverity, setFilterSeverity] = useState<string>('all')
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null)
+  const [inputMode, setInputMode] = useState<'text' | 'file'>('text')
   
   // Check for draft text from generate page - only after mount to avoid hydration issues
   useEffect(() => {
@@ -29,8 +31,59 @@ export default function ValidatePage() {
     }
   }, [])
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setError(null)
+    setUploadedFileName(file.name)
+    setLoading(true)
+    setResult(null)
+
+    try {
+      // Extract text from file
+      const extractFormData = new FormData()
+      extractFormData.append('file', file)
+
+      const extractResponse = await fetch('/api/extract-text', {
+        method: 'POST',
+        body: extractFormData,
+      })
+
+      if (!extractResponse.ok) {
+        const errorData = await extractResponse.json()
+        throw new Error(errorData.error || 'Failed to extract text from file')
+      }
+
+      const extractData = await extractResponse.json()
+      
+      // Show extracted text in textarea immediately
+      if (extractData.text) {
+        setText(extractData.text)
+        // Switch to text mode so user can see the extracted text
+        setInputMode('text')
+      } else {
+        throw new Error('No text could be extracted from the file')
+      }
+
+      // Do NOT auto-validate - user will click Validate button
+    } catch (err: any) {
+      setError(err.message || 'An error occurred')
+      setUploadedFileName(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validate that text is provided
+    if (!text || text.trim().length === 0) {
+      setError('Please provide draft text or upload a file')
+      return
+    }
+
     setLoading(true)
     setError(null)
     setResult(null)
@@ -124,6 +177,40 @@ export default function ValidatePage() {
           <h1 className="text-3xl font-bold text-bain-blue mb-6">Validate Draft</h1>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Input Mode Toggle */}
+            <div className="flex gap-4 mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setInputMode('text')
+                  setUploadedFileName(null)
+                  setText('')
+                }}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  inputMode === 'text'
+                    ? 'bg-bain-blue text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                📝 Paste Text
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInputMode('file')
+                  setText('')
+                }}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  inputMode === 'file'
+                    ? 'bg-bain-blue text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                📄 Upload File
+              </button>
+            </div>
+
+            {/* Always show textarea */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Draft Text *
@@ -131,13 +218,59 @@ export default function ValidatePage() {
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                required
+                required={inputMode === 'text'}
                 rows={12}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bain-blue focus:border-transparent"
-                placeholder="Paste your draft text here..."
+                placeholder={inputMode === 'file' ? 'Upload a file to extract text here...' : 'Paste your draft text here or upload a file...'}
                 suppressHydrationWarning
+                disabled={loading && inputMode === 'file'}
               />
+              {loading && inputMode === 'file' && (
+                <p className="mt-2 text-sm text-blue-600">
+                  ⏳ Extracting text from file... (Click Validate button after extraction)
+                </p>
+              )}
+              {uploadedFileName && !loading && inputMode === 'text' && (
+                <p className="mt-2 text-sm text-green-600">
+                  ✅ Text extracted from {uploadedFileName}. Review and click Validate when ready.
+                </p>
+              )}
             </div>
+
+            {/* File upload section */}
+            {inputMode === 'file' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Upload File (PDF, DOCX, DOC, PPTX, PPT, TXT, MD, HTML)
+                </label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                  <input
+                    type="file"
+                    onChange={handleFileChange}
+                    accept=".pdf,.docx,.doc,.pptx,.ppt,.txt,.md,.markdown,.html,.htm"
+                    className="hidden"
+                    id="file-upload"
+                    disabled={loading}
+                  />
+                  <label
+                    htmlFor="file-upload"
+                    className={`cursor-pointer inline-block px-6 py-3 bg-bain-blue text-white rounded-lg hover:bg-blue-800 transition-colors ${
+                      loading ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {loading ? 'Processing...' : uploadedFileName ? 'Change File' : 'Choose File'}
+                  </label>
+                  {uploadedFileName && !loading && (
+                    <p className="mt-3 text-sm text-gray-600">
+                      📎 {uploadedFileName}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-gray-500">
+                    Maximum file size: 100MB. Text will be extracted and shown above.
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="grid md:grid-cols-2 gap-4">
               <div>
@@ -165,7 +298,7 @@ export default function ValidatePage() {
                   onChange={(e) => setGeography(e.target.value as Geography)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bain-blue"
                 >
-                  <option value="US">US</option>
+                  <option value="United States">United States</option>
                   <option value="EU">EU</option>
                   <option value="UK">UK</option>
                   <option value="India">India</option>

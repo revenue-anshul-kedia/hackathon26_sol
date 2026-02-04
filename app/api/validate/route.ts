@@ -3,6 +3,7 @@ import OpenAI from 'openai'
 import { ValidationResult, ValidationInput, SourceReference } from '@/lib/validation'
 import mockSources from '@/data/mock_sources.json'
 import { searchWeb, validateAndEnrichURL, generateSearchQueries } from '@/lib/web-search'
+import { extractTextFromFile, validateFile } from '@/lib/file-extraction'
 
 // Build context-specific validation guidelines based on metadata
 function buildContextGuidelines(
@@ -36,7 +37,7 @@ function buildContextGuidelines(
   }
   
   const geographyGuidelines: Record<string, string> = {
-    'US': `GEOGRAPHY: UNITED STATES
+    'United States': `GEOGRAPHY: UNITED STATES
 - Key regulations: SEC, FTC, HIPAA, SOX, Dodd-Frank, state-specific laws
 - Financial data must comply with SEC disclosure requirements if public company
 - Healthcare data requires HIPAA compliance markers
@@ -1358,9 +1359,62 @@ Return ONLY valid JSON.`
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    
-    const { text, case_type, geography, industry, stakes_level } = body
+    const contentType = request.headers.get('content-type') || ''
+    let text = ''
+    let case_type = ''
+    let geography = ''
+    let industry = ''
+    let stakes_level = ''
+    let extractedText = ''
+    let fileName = ''
+
+    // Handle file upload (FormData) or JSON text input
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData()
+      const file = formData.get('file') as File | null
+      
+      if (!file) {
+        return NextResponse.json(
+          { error: 'File is required when uploading' },
+          { status: 400 }
+        )
+      }
+
+      // Validate file
+      const validation = validateFile(file)
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: validation.error || 'Invalid file' },
+          { status: 400 }
+        )
+      }
+
+      // Extract text from file
+      fileName = file.name
+      const extractionResult = await extractTextFromFile(file, fileName, file.type)
+      
+      if (extractionResult.error || !extractionResult.text) {
+        return NextResponse.json(
+          { error: extractionResult.error || 'Failed to extract text from file' },
+          { status: 400 }
+        )
+      }
+
+      text = extractionResult.text
+      extractedText = extractionResult.text
+      case_type = (formData.get('case_type') as string) || ''
+      geography = (formData.get('geography') as string) || ''
+      industry = (formData.get('industry') as string) || ''
+      stakes_level = (formData.get('stakes_level') as string) || ''
+    } else {
+      // Handle JSON text input (existing flow)
+      const body = await request.json()
+      text = body.text || ''
+      case_type = body.case_type || ''
+      geography = body.geography || ''
+      industry = body.industry || ''
+      stakes_level = body.stakes_level || ''
+    }
     
     // Validate required fields
     if (!text || !case_type || !geography || !industry || !stakes_level) {
@@ -1907,7 +1961,16 @@ Return ONLY valid JSON, no additional text or markdown formatting.`
       // Note: Source validation issues are displayed in the Sources & References section of the UI
       // We don't add them to the findings table to avoid duplication
       
-      return NextResponse.json(result)
+      // Include extracted text if it came from a file
+      const responseData: any = { ...result }
+      if (extractedText) {
+        responseData.extracted_text = extractedText
+        responseData.source_file = fileName
+      }
+      
+      return NextResponse.json(responseData)
+      
+      return NextResponse.json(responseData)
       
     } catch (configError: any) {
       // If Azure OpenAI is not configured, fall back to heuristic validation

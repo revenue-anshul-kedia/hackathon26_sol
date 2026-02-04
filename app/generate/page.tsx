@@ -4,12 +4,12 @@ import { useState } from 'react'
 import Link from 'next/link'
 
 type CaseType = 'Diligence' | 'Strategy' | 'Performance Transformation' | 'Org Design'
-type Geography = 'US' | 'EU' | 'UK' | 'India' | 'China' | 'Global'
+type Geography = 'United States' | 'EU' | 'UK' | 'India' | 'China' | 'Global'
 
 export default function GeneratePage() {
   const [prompt, setPrompt] = useState('')
   const [caseType, setCaseType] = useState<CaseType>('Diligence')
-  const [geography, setGeography] = useState<Geography>('US')
+  const [geography, setGeography] = useState<Geography>('United States')
   const [industry, setIndustry] = useState('')
   const [loading, setLoading] = useState(false)
   const [draft, setDraft] = useState('')
@@ -125,7 +125,7 @@ export default function GeneratePage() {
                   onChange={(e) => setGeography(e.target.value as Geography)}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-bain-blue"
                 >
-                  <option value="US">US</option>
+                  <option value="United States">United States</option>
                   <option value="EU">EU</option>
                   <option value="UK">UK</option>
                   <option value="India">India</option>

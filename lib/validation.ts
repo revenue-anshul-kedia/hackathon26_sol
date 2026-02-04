@@ -2,7 +2,7 @@ import mockSources from '@/data/mock_sources.json'
 import lawKeywords from '@/data/law_keywords.json'
 
 export type CaseType = 'Diligence' | 'Strategy' | 'Performance Transformation' | 'Org Design'
-export type Geography = 'US' | 'EU' | 'UK' | 'India' | 'China' | 'Global'
+export type Geography = 'United States' | 'EU' | 'UK' | 'India' | 'China' | 'Global'
 export type StakesLevel = 'Internal draft' | 'Client discussion' | 'Board-level'
 export type Severity = 'low' | 'medium' | 'high'
 export type Category = 'Freshness' | 'Regulatory' | 'Evidence' | 'BainStyle' | 'Bias'
